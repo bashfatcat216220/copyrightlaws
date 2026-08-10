@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ j.name if j else 'Jurisdiction' }} — Copyright Corpus{% endblock %}
+{% block body %}
+  {% if not j %}
+    <p class="empty">No such jurisdiction.</p>
+  {% else %}
+    <div class="eyebrow">Tier {{ j.tier }} · {{ j.code }}</div>
+    <h1 class="title">{{ j.name }}</h1>
+    {% if j.notes %}<p class="lead">{{ j.notes }}</p>{% endif %}
+
+    {% if not insts %}
+      <p class="empty">No instruments loaded for {{ j.name }} yet.</p>
+    {% else %}
+      {% for c in insts %}
+        <div class="lrow">
+          <div class="cite">{{ c.official_citation or c.type }}</div>
+          <div>
+            <div class="h"><a href="/instrument/{{ c.id }}">{{ c.title }}</a></div>
+            <div class="m">{{ c.type }}
+              {% if c.status == 'in_force' %}<span class="chip green" style="margin-left:6px;">In force</span>
+              {% elif c.status == 'repealed' %}<span class="chip amber" style="margin-left:6px;">Repealed</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endif %}
+{% endblock %}

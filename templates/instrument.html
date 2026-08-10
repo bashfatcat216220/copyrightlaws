@@ -4,17 +4,19 @@
   {% if not inst %}
     <p class="empty">No such instrument.</p>
   {% else %}
-    <p style="color:#6b6b6b;font-size:13px;margin:0 0 4px;">
-      {{ inst.jurisdiction }} · {{ inst.type }}{% if inst.official_citation %} · {{ inst.official_citation }}{% endif %}
+    <div class="eyebrow">{{ inst.jurisdiction }} · {{ inst.type }}</div>
+    <h1 class="title">{{ inst.title }}</h1>
+    <p class="lead">
+      {% if inst.official_citation %}<span class="cite" style="font-family:var(--mono);color:var(--navy);">{{ inst.official_citation }}</span>{% endif %}
+      {% if ver and ver.point_in_time %} · in force from {{ ver.point_in_time }}{% endif %}
     </p>
-    <h1 style="margin:0 0 10px;">{{ inst.title }}</h1>
 
     {% if ver %}
       <p>
-        {% if not ver.is_authentic %}<span class="flag">consolidated — NOT authentic</span>{% endif %}
-        {% if not ver.is_official_language %}<span class="flag">unofficial translation</span>{% endif %}
-        {% if ver.has_unapplied_effects %}<span class="flag">may carry unapplied effects</span>{% endif %}
-        {% if ver.point_in_time %}<span style="font-size:13px;color:#6b6b6b;">in force from {{ ver.point_in_time }}</span>{% endif %}
+        {% if inst.status == 'in_force' %}<span class="chip green">In force</span>{% endif %}
+        {% if not ver.is_authentic %}<span class="chip amber">Consolidated — not authentic</span>{% endif %}
+        {% if not ver.is_official_language %}<span class="chip amber">Unofficial translation</span>{% endif %}
+        {% if ver.has_unapplied_effects %}<span class="chip amber">May carry unapplied effects</span>{% endif %}
       </p>
 
       {% if ver.content %}
@@ -25,19 +27,20 @@
 
       {# The two fields that matter most: source_url + retrieved_at, on every screen. #}
       <div class="prov">
-        Source: <a href="{{ ver.source_url }}" target="_blank" rel="noopener">{{ ver.source_url }}</a><br>
-        Retrieved: {{ ver.retrieved_at }}
+        SOURCE&nbsp; <a href="{{ ver.source_url }}" target="_blank" rel="noopener">{{ ver.source_url }}</a><br>
+        RETRIEVED&nbsp; {{ ver.retrieved_at }}
       </div>
     {% else %}
       <p class="empty">No stored version yet for this instrument.</p>
     {% endif %}
 
     {% if versions|length > 1 %}
-      <h3>Versions on file</h3>
+      <div class="eyebrow" style="margin-top:26px;">Versions on file</div>
       <table>
         <tr><th>Point in time</th><th>Retrieved</th><th>Flags</th></tr>
         {% for v in versions %}
-          <tr><td>{{ v.point_in_time or '—' }}</td><td>{{ v.retrieved_at }}</td>
+          <tr><td class="cite" style="font-family:var(--mono);">{{ v.point_in_time or '—' }}</td>
+              <td>{{ v.retrieved_at }}</td>
               <td>{% if not v.is_authentic %}not authentic {% endif %}
                   {% if not v.is_official_language %}translation{% endif %}</td></tr>
         {% endfor %}

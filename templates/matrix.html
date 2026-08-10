@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Comparative matrix — Copyright Corpus{% endblock %}
+{% block body %}
+  <div class="eyebrow">Comparative matrix</div>
+  <h1 class="title">Attributes across jurisdictions</h1>
+  <p class="lead">Term, moral rights, TDM/AI-training exception, fair use, safe harbour, and more —
+    drafted from the cited source text, shown as authority only when a person has verified it.</p>
+
+  {% if not cells %}
+    <p class="empty">The matrix is empty. Cells are populated in Phase 4 — each is model-drafted
+      from a cited source version, then human-verified before it appears here as authority.</p>
+  {% else %}
+    <table>
+      <tr><th>Attribute</th><th>Jurisdiction</th><th>Value</th><th>Status</th></tr>
+      {% for c in cells %}
+        <tr>
+          <td class="cite" style="font-family:var(--mono);">{{ c.attribute }}</td>
+          <td>{{ c.jurisdiction }}</td>
+          <td>{{ c.value or '—' }}</td>
+          <td>{% if c.verified_by %}<span class="chip green">Verified</span>
+              {% else %}<span class="chip amber">Draft</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+{% endblock %}

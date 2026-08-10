@@ -3,10 +3,11 @@
 Reads ONLY from the DB. Every page renders the standing finding-aid caveat and, on any
 instrument/version, its source_url + retrieved_at (the two fields that matter most — the
 tool is a finding aid, never a citation). Works empty (no data yet) with honest empty-states.
+Styling = the Article One design system (navy accent, ink-black surfaces, Caslon/Source
+Serif/Franklin/Plex Mono) in a legal-research-terminal layout (rail + citation gutter).
 """
 from __future__ import annotations
 
-import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -21,37 +22,45 @@ import db  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(REPO_ROOT / "templates"))
 
-CAVEAT = ("Internal research aid. Not verified for currency. Confirm against the official "
-          "source before relying on it in client work.")
-
 app = FastAPI(title="Copyright Corpus")
 
 
 @app.on_event("startup")
 def _startup() -> None:
-    db.init_db()  # idempotent; makes an empty but valid DB on first boot
+    db.init_db()  # idempotent; an empty but valid DB on first boot
 
 
 def _conn() -> sqlite3.Connection:
     return db.connect()
 
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    conn = _conn()
-    tiers = {}
+def _rail(conn: sqlite3.Connection) -> dict:
+    """Jurisdiction rail: tier -> [{code,name,n}] with live instrument counts."""
+    tiers: dict = {}
     for r in conn.execute(
         "SELECT j.tier, j.code, j.name, "
         "  (SELECT COUNT(*) FROM instruments i WHERE i.jurisdiction=j.code) AS n "
         "FROM jurisdictions j ORDER BY j.tier, j.name"):
         tiers.setdefault(r["tier"], []).append(dict(r))
+    return tiers
+
+
+def _ctx(conn, active_jur=None, **extra) -> dict:
+    return {"jurs": _rail(conn), "active_jur": active_jur, **extra}
+
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    conn = _conn()
     stats = {
         "instruments": conn.execute("SELECT COUNT(*) FROM instruments").fetchone()[0],
         "versions": conn.execute("SELECT COUNT(*) FROM versions").fetchone()[0],
         "jurisdictions": conn.execute("SELECT COUNT(*) FROM jurisdictions").fetchone()[0],
     }
-    return templates.TemplateResponse(request, "index.html",
-                                      {"tiers": tiers, "stats": stats, "caveat": CAVEAT})
+    recent = [dict(r) for r in conn.execute(
+        "SELECT id, title, official_citation, jurisdiction FROM instruments "
+        "ORDER BY last_updated_at DESC LIMIT 12")]
+    return templates.TemplateResponse(request, "index.html", _ctx(conn, stats=stats, recent=recent))
 
 
 @app.get("/search", response_class=HTMLResponse)
@@ -67,8 +76,18 @@ def search(request: Request, q: str = ""):
                 "FROM versions_fts f JOIN versions v ON v.id=f.rowid "
                 "JOIN instruments i ON i.id=v.instrument_id "
                 "WHERE versions_fts MATCH ? ORDER BY rank LIMIT 50", (toks,)).fetchall()]
-    return templates.TemplateResponse(request, "search.html",
-                                      {"q": q, "results": results, "caveat": CAVEAT})
+    return templates.TemplateResponse(request, "search.html", _ctx(conn, q=q, results=results))
+
+
+@app.get("/jurisdiction/{code}", response_class=HTMLResponse)
+def jurisdiction(request: Request, code: str):
+    conn = _conn()
+    j = conn.execute("SELECT * FROM jurisdictions WHERE code=?", (code,)).fetchone()
+    insts = [dict(r) for r in conn.execute(
+        "SELECT id, title, official_citation, type, status FROM instruments "
+        "WHERE jurisdiction=? ORDER BY type, title", (code,))]
+    return templates.TemplateResponse(request, "jurisdiction.html",
+                                      _ctx(conn, active_jur=code, j=dict(j) if j else None, insts=insts))
 
 
 @app.get("/instrument/{iid}", response_class=HTMLResponse)
@@ -80,7 +99,16 @@ def instrument(request: Request, iid: int):
     versions = [dict(r) for r in conn.execute(
         "SELECT id, point_in_time, retrieved_at, is_authentic, is_official_language "
         "FROM versions WHERE instrument_id=? ORDER BY point_in_time DESC", (iid,))]
+    active = inst["jurisdiction"] if inst else None
     return templates.TemplateResponse(request, "instrument.html",
-                                      {"inst": dict(inst) if inst else None,
-                                       "ver": dict(ver) if ver else None,
-                                       "versions": versions, "caveat": CAVEAT})
+                                      _ctx(conn, active_jur=active, inst=dict(inst) if inst else None,
+                                           ver=dict(ver) if ver else None, versions=versions))
+
+
+@app.get("/matrix", response_class=HTMLResponse)
+def matrix(request: Request):
+    conn = _conn()
+    cells = [dict(r) for r in conn.execute(
+        "SELECT jurisdiction, attribute, value, verified_by FROM matrix_cells "
+        "ORDER BY attribute, jurisdiction")]
+    return templates.TemplateResponse(request, "matrix.html", _ctx(conn, cells=cells))

@@ -1,21 +1,25 @@
 {% extends "base.html" %}
+{% block title %}Search — Copyright Corpus{% endblock %}
 {% block body %}
-  <form action="/search" method="get" style="margin-bottom:22px;">
-    <input type="search" name="q" value="{{ q }}" placeholder="Search the corpus">
+  <div class="eyebrow">Search</div>
+  <h1 class="title">Search the corpus</h1>
+  <form class="searchbar" action="/search" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Full-text search across every version on file">
     <button type="submit">Search</button>
   </form>
 
   {% if q and not results %}
-    <p class="empty">No matches for "{{ q }}"{% if q %} (the corpus may not be populated yet){% endif %}.</p>
+    <p class="empty">No matches for "{{ q }}" — the corpus may not be populated yet.</p>
   {% endif %}
 
   {% for r in results %}
-    <div style="margin-bottom:18px;border-bottom:1px solid #d8d3c8;padding-bottom:12px;">
-      <a href="/instrument/{{ r.instrument_id }}" style="font-weight:bold;color:#1a1a1a;">
-        {{ r.title }}</a>
-      <span style="color:#6b6b6b;font-size:13px;">
-        · {{ r.jurisdiction }}{% if r.official_citation %} · {{ r.official_citation }}{% endif %}</span>
-      <div style="font-size:13.5px;color:#333;margin-top:4px;">{{ r.snip }}</div>
+    <div class="lrow">
+      <div class="cite">{{ r.official_citation or r.jurisdiction }}</div>
+      <div>
+        <div class="h"><a href="/instrument/{{ r.instrument_id }}">{{ r.title }}</a></div>
+        <div class="m">{{ r.jurisdiction }}</div>
+        <div class="snip">{{ r.snip }}</div>
+      </div>
     </div>
   {% endfor %}
 {% endblock %}

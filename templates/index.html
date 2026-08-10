@@ -1,28 +1,29 @@
 {% extends "base.html" %}
 {% block body %}
-  <form action="/search" method="get" style="margin-bottom:22px;">
+  <div class="eyebrow">Reference · Change monitor</div>
+  <h1 class="title">Copyright law, consolidated and sourced</h1>
+  <p class="lead">{{ stats.instruments }} instruments · {{ stats.versions }} versions ·
+    {{ stats.jurisdictions }} jurisdictions on file.</p>
+
+  <form class="searchbar" action="/search" method="get">
     <input type="search" name="q" placeholder="Search the corpus — e.g. term of protection, TDM exception">
     <button type="submit">Search</button>
   </form>
 
-  <p style="font-size:13px;color:#6b6b6b;">
-    {{ stats.instruments }} instruments · {{ stats.versions }} versions ·
-    {{ stats.jurisdictions }} jurisdictions on file.
-  </p>
-
-  {% if not tiers %}
-    <p class="empty">No jurisdictions loaded yet. Run the Phase-0 connectors to populate the
-      corpus (UK CDPA · US 17 U.S.C. / 37 C.F.R. · EU DSM+InfoSoc · core treaties).</p>
+  {% if not recent %}
+    <p class="empty">No statute text loaded yet — the jurisdiction rail shows the scope; the
+      counts fill in once the connectors run (UK CDPA · US 17 U.S.C. / 37 C.F.R. ·
+      EU directives · core treaties).</p>
   {% else %}
-    {% for tier, rows in tiers.items() %}
-      <h2 style="border-bottom:1px solid #d8d3c8;padding-bottom:4px;">Tier {{ tier }}</h2>
-      <table>
-        <tr><th>Jurisdiction</th><th>Instruments</th></tr>
-        {% for j in rows %}
-          <tr><td>{{ j.name }} <span style="color:#6b6b6b;">({{ j.code }})</span></td>
-              <td>{{ j.n }}</td></tr>
-        {% endfor %}
-      </table>
+    <div class="eyebrow" style="margin-bottom:6px;">Recently updated</div>
+    {% for c in recent %}
+      <div class="lrow">
+        <div class="cite">{{ c.official_citation or c.jurisdiction }}</div>
+        <div>
+          <div class="h"><a href="/instrument/{{ c.id }}">{{ c.title }}</a></div>
+          <div class="m">{{ c.jurisdiction }}</div>
+        </div>
+      </div>
     {% endfor %}
   {% endif %}
 {% endblock %}
