@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ inst.title if inst else 'Instrument' }} — Copyright Corpus{% endblock %}
+{% block body %}
+  {% if not inst %}
+    <p class="empty">No such instrument.</p>
+  {% else %}
+    <p style="color:#6b6b6b;font-size:13px;margin:0 0 4px;">
+      {{ inst.jurisdiction }} · {{ inst.type }}{% if inst.official_citation %} · {{ inst.official_citation }}{% endif %}
+    </p>
+    <h1 style="margin:0 0 10px;">{{ inst.title }}</h1>
+
+    {% if ver %}
+      <p>
+        {% if not ver.is_authentic %}<span class="flag">consolidated — NOT authentic</span>{% endif %}
+        {% if not ver.is_official_language %}<span class="flag">unofficial translation</span>{% endif %}
+        {% if ver.has_unapplied_effects %}<span class="flag">may carry unapplied effects</span>{% endif %}
+        {% if ver.point_in_time %}<span style="font-size:13px;color:#6b6b6b;">in force from {{ ver.point_in_time }}</span>{% endif %}
+      </p>
+
+      {% if ver.content %}
+        <pre class="lawtext">{{ ver.content }}</pre>
+      {% else %}
+        <p class="empty">Metadata only — read the full text at the official source below.</p>
+      {% endif %}
+
+      {# The two fields that matter most: source_url + retrieved_at, on every screen. #}
+      <div class="prov">
+        Source: <a href="{{ ver.source_url }}" target="_blank" rel="noopener">{{ ver.source_url }}</a><br>
+        Retrieved: {{ ver.retrieved_at }}
+      </div>
+    {% else %}
+      <p class="empty">No stored version yet for this instrument.</p>
+    {% endif %}
+
+    {% if versions|length > 1 %}
+      <h3>Versions on file</h3>
+      <table>
+        <tr><th>Point in time</th><th>Retrieved</th><th>Flags</th></tr>
+        {% for v in versions %}
+          <tr><td>{{ v.point_in_time or '—' }}</td><td>{{ v.retrieved_at }}</td>
+              <td>{% if not v.is_authentic %}not authentic {% endif %}
+                  {% if not v.is_official_language %}translation{% endif %}</td></tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+  {% endif %}
+{% endblock %}

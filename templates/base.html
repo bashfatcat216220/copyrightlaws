@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Copyright Corpus{% endblock %}</title>
+  <style>
+    :root { --ink:#1a1a1a; --line:#d8d3c8; --muted:#6b6b6b; --amber:#8a5a00; --paper:#fff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:15px/1.55 Georgia, "Source Serif 4", serif; color:var(--ink); background:var(--paper); }
+    header.masthead { border-bottom:2px solid var(--ink); padding:14px 24px; display:flex; align-items:baseline; gap:20px; }
+    .masthead h1 { font-size:22px; margin:0; letter-spacing:.02em; }
+    .masthead nav a { color:var(--ink); text-decoration:none; margin-right:16px; font-size:14px; }
+    .masthead nav a:hover { text-decoration:underline; }
+    .caveat { background:#fdf6e3; border-bottom:1px solid var(--line); color:var(--amber);
+              font:12.5px/1.4 -apple-system, system-ui, sans-serif; padding:8px 24px; }
+    main { max-width:960px; margin:0 auto; padding:24px; }
+    .prov { font:12.5px/1.5 ui-monospace, monospace; color:var(--muted); border-top:1px solid var(--line);
+            margin-top:16px; padding-top:10px; }
+    .prov a { color:var(--amber); }
+    .flag { display:inline-block; font:11px/1 sans-serif; background:#fdf6e3; color:var(--amber);
+            border:1px solid #e6d9b0; border-radius:3px; padding:3px 6px; margin-right:6px; }
+    .empty { color:var(--muted); font-style:italic; }
+    table { border-collapse:collapse; width:100%; font-size:14px; }
+    td, th { border-bottom:1px solid var(--line); text-align:left; padding:7px 8px; vertical-align:top; }
+    input[type=search] { font:15px Georgia, serif; padding:7px 10px; border:1px solid var(--line); width:60%; }
+    button { font:14px sans-serif; padding:7px 14px; border:1px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer; }
+    pre.lawtext { white-space:pre-wrap; font:14px/1.6 Georgia, serif; background:#fbfaf7; border:1px solid var(--line); padding:16px; }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <h1><a href="/" style="color:inherit;text-decoration:none;">Copyright Corpus</a></h1>
+    <nav>
+      <a href="/">Browse</a>
+      <a href="/search">Search</a>
+    </nav>
+  </header>
+  <div class="caveat">{{ caveat }}</div>
+  <main>{% block body %}{% endblock %}</main>
+</body>
+</html>

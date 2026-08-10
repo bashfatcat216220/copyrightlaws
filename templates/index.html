@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block body %}
+  <form action="/search" method="get" style="margin-bottom:22px;">
+    <input type="search" name="q" placeholder="Search the corpus — e.g. term of protection, TDM exception">
+    <button type="submit">Search</button>
+  </form>
+
+  <p style="font-size:13px;color:#6b6b6b;">
+    {{ stats.instruments }} instruments · {{ stats.versions }} versions ·
+    {{ stats.jurisdictions }} jurisdictions on file.
+  </p>
+
+  {% if not tiers %}
+    <p class="empty">No jurisdictions loaded yet. Run the Phase-0 connectors to populate the
+      corpus (UK CDPA · US 17 U.S.C. / 37 C.F.R. · EU DSM+InfoSoc · core treaties).</p>
+  {% else %}
+    {% for tier, rows in tiers.items() %}
+      <h2 style="border-bottom:1px solid #d8d3c8;padding-bottom:4px;">Tier {{ tier }}</h2>
+      <table>
+        <tr><th>Jurisdiction</th><th>Instruments</th></tr>
+        {% for j in rows %}
+          <tr><td>{{ j.name }} <span style="color:#6b6b6b;">({{ j.code }})</span></td>
+              <td>{{ j.n }}</td></tr>
+        {% endfor %}
+      </table>
+    {% endfor %}
+  {% endif %}
+{% endblock %}
