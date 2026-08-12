@@ -217,12 +217,23 @@ provisions** (15 chapters … 153 sections … down to subitem), **153 section v
 a second run inserts 0 new versions. Deep pinpoint `§ 104A(d)(2)(A)(i)` resolves; `§ 106A`
 sorts between `§ 106` and `§ 107`.
 
-**Two schema fixes the ingest CAUGHT (folded into migration 001) — why we draft the ingest
-before freezing:**
+**Two schema fixes the USLM ingest CAUGHT (folded into migration 001) — why we draft the
+ingest before freezing:**
 1. `versions` UNIQUE was `(instrument_id, point_in_time, language)` — collides once many
    provisions of one instrument share a point-in-time. Rebuilt to include `provision_id`.
 2. `kind` CHECK was missing USLM's deep levels (`subclause`/`item`/`subitem`/`subpart`).
    Extended. (17 U.S.C. nests 4 below the section.)
+
+**CDPA ingest DRAFTED:** `src/store/ingest_clml.py` — CLML, second source shape, exercises
+the Body-vs-Schedule role split. Validated on the demo DB: **436 Body sections** (role
+`enacting`) **+ 349 Schedule paragraphs** (role `schedule`), `s. 296 < 296A < 296B < 296ZA`
+ordering, FTS `fair dealing`→ s.29/s.30. Idempotent (re-run: 0 new). What the CLML ingest
+caught: (a) CDPA **Schedule 1 contains `Part` elements** — the Part/Chapter handler had to
+PRESERVE schedule context or schedule paragraphs get misclassified as Body sections and
+collide with real section numbers (corrupted `s. 1`); (b) some schedule-paragraph citations
+still collide (schedule sub-structure the pinpoint doesn't yet capture) — currently guarded
+by a deterministic `#n` suffix; **real fix later = full schedule-part pinpointing in the
+CLML citation.**
 
 ## Source plan — how the corpus gets added
 
