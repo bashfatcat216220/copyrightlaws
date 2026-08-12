@@ -19,10 +19,10 @@ Pre-Phase-0 scaffold, now carrying the **KM IP — Statute Browser** design syst
 - **DB**: migration 001 **APPLIED to `corpus.db`** (Bing signed off 2026-08-12). The Phase-0
   Tier-1 slice is COMPLETE — all four source shapes loaded via the approved ingests:
   **17 U.S.C.** (USLM; 153 sections) + **CDPA 1988** (CLML; 436 Body sections + 349 schedule
-  paras) + **InfoSoc / Directive 2001/29** (Formex; 15 articles) + **Berne Convention**
-  (WIPO Lex HTML hand-load; 53 articles incl. bis/ter + roman Appendix, 250 paragraphs).
-  **4 instruments · 8,673 provisions · 1,084 provision versions.** The live server runs on
-  `corpus.db`; the section reader shows real US + UK + EU + INT law.
+  paras) + **InfoSoc / Directive 2001/29** (Formex; 15 articles + **61 recitals**) + **Berne
+  Convention** (WIPO Lex HTML hand-load; 53 articles incl. bis/ter + roman Appendix, 250
+  paragraphs). **4 instruments · 8,734 provisions · 1,145 provision versions.** The live
+  server runs on `corpus.db`; the section reader shows real US + UK + EU + INT law.
 
 ## Done this session — UI reskin (ships now)
 
@@ -117,8 +117,12 @@ not design the table blind either.
   shows two.
 - **Schedules are a SEPARATE provision class** (own paragraph numbering) — model them, don't
   merge into the section sequence.
-- **Recitals — resolved (proposed, Bing confirms):** model recitals as **provisions,
-  `kind='recital'`, `operative=0`**. CJEU judgments turn on recital language (Recital 31 of
+- **Recitals — DONE (2026-08-12):** InfoSoc's 61 recitals are loaded from the ORIGINAL OJ
+  act (EUR-Lex HTML), `kind='recital'`, `role='recital'`, railed as a "Recitals" group above
+  the articles. Crucially they demonstrate the provenance split WITHIN one instrument:
+  recital version rows are `is_authentic=1, is_consolidated=0` (original OJ = authentic) while
+  the article rows are `is_authentic=0, is_consolidated=1` (consolidated). Model recitals as
+  **provisions, `kind='recital'`, `role='recital'`**. CJEU judgments turn on recital language (Recital 31 of
   InfoSoc is cited constantly), so they need stable addressable ids — exactly a provision
   node — but the `operative=0` flag keeps them out of anything that counts or diffs enacted
   law. Consequence, which is a version/provenance decision not a parsing one: the **original

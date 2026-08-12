@@ -34,11 +34,16 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html as htmlmod
 import os
 import re
 import sqlite3
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+
+# Recitals live in the ORIGINAL OJ act (EUR-Lex HTML), as <p>(N) ...</p> in the preamble
+# between "Whereas" and "HAVE ADOPTED THIS DIRECTIVE". The consolidated Formex flattens them.
+RECITAL_P = re.compile(r"<p[^>]*>\s*\((\d+)\)\s*(.*?)</p>", re.S)
 
 # Subtrees that reproduce OTHER instruments' words / notes — never this act's operative text.
 SKIP = {"GR.MOD.ACT", "MOD.ACT", "GR.CORRIG", "CORRIG"}
@@ -217,6 +222,22 @@ def parse(xml_path: str) -> tuple[str, list[dict]]:
     return INSTRUMENT["title"], records
 
 
+def parse_recitals(html_path: str) -> list[dict]:
+    """Extract numbered recitals from the ORIGINAL OJ act HTML (kind='recital')."""
+    h = open(html_path, encoding="utf-8").read()
+    w, a = h.find("Whereas"), h.find("HAVE ADOPTED")
+    seg = h[w:a] if (w != -1 and a != -1 and a > w) else h
+    out: list[dict] = []
+    for m in RECITAL_P.finditer(seg):
+        n = int(m.group(1))
+        text = re.sub(r"\s+", " ", htmlmod.unescape(re.sub(r"<[^>]+>", " ", m.group(2)))).strip()
+        if text:
+            out.append({"num": n, "label": f"Recital {n}", "heading": None,
+                        "sort_int": n, "sort_suffix": "", "kind": "recital", "role": "recital",
+                        "citation": f"Directive 2001/29 Recital {n}", "content": text})
+    return out
+
+
 # ── DB writers (idempotent) — same contract as ingest_uslm / ingest_clml ────────
 def _require_migration(conn):
     if not conn.execute("SELECT name FROM sqlite_master WHERE name='provisions'").fetchone():
@@ -254,11 +275,14 @@ def _upsert_provision(conn, iid, parent_id, r) -> int:
     return cur.lastrowid
 
 
-def _store_version(conn, iid, provid, r, source_url, point_in_time) -> str:
+def _store_version(conn, iid, provid, r, source_url, point_in_time,
+                   version_label="EUR-Lex Formex (consolidated)",
+                   is_authentic=0, is_consolidated=1) -> str:
     """Insert a provision version. FIRST place is_authentic earns its place: the consolidated
-    Formex manifestation is NOT authentic — set is_authentic=0, is_consolidated=1,
-    is_official_language=1 (English is an official EU language) EXPLICITLY (the USLM/CLML
-    template inserts leave these at their authentic=1 defaults)."""
+    Formex ARTICLES are NOT authentic (is_authentic=0, is_consolidated=1). RECITALS come from
+    the ORIGINAL OJ act, which IS authentic (is_authentic=1, is_consolidated=0) — the
+    provenance split, made concrete WITHIN one instrument. is_official_language=1 either way
+    (English is an official EU language)."""
     content = r["content"]
     digest = sha256(content)
     existing = conn.execute(
@@ -272,9 +296,9 @@ def _store_version(conn, iid, provid, r, source_url, point_in_time) -> str:
             "INSERT INTO versions (instrument_id, provision_id, version_label, point_in_time, "
             "language, is_official_language, is_consolidated, is_authentic, content, "
             "content_sha256, source_url, retrieved_at, is_current) "
-            "VALUES (?,?,?,?, 'en', 1, 1, 0, ?,?,?,?, 1)",
-            (iid, provid, "EUR-Lex Formex (consolidated)", point_in_time, content, digest,
-             source_url, now_iso()))
+            "VALUES (?,?,?,?, 'en', 1, ?, ?, ?,?,?,?, 1)",
+            (iid, provid, version_label, point_in_time, is_consolidated, is_authentic,
+             content, digest, source_url, now_iso()))
         conn.execute("INSERT INTO versions_fts (rowid, title, citation, body) VALUES (?,?,?,?)",
                      (cur.lastrowid, "Directive 2001/29/EC", r["citation"], content))
         outcome = "new"
@@ -284,7 +308,8 @@ def _store_version(conn, iid, provid, r, source_url, point_in_time) -> str:
     return outcome
 
 
-def ingest(db_path, xml_path, source_url, point_in_time=None, allow_corpus=False) -> dict:
+def ingest(db_path, xml_path, source_url, point_in_time=None, allow_corpus=False,
+           recitals_html=None, recitals_source_url=None) -> dict:
     if os.path.basename(db_path) == "corpus.db" and not allow_corpus:
         raise SystemExit("refusing to write the live corpus.db (schema is pending sign-off). "
                          "Pass --allow-corpus only after the migration is approved.")
@@ -306,6 +331,16 @@ def ingest(db_path, xml_path, source_url, point_in_time=None, allow_corpus=False
         if r["content"]:
             outcome = _store_version(conn, iid, pid, r, source_url, point_in_time)
             stats["versions_new" if outcome == "new" else "versions_unchanged"] += 1
+    # Recitals from the ORIGINAL OJ act (authentic text) — top-level nodes (they precede Art. 1).
+    if recitals_html:
+        for r in parse_recitals(recitals_html):
+            pid = _upsert_provision(conn, iid, None, r)
+            stats["provisions"] += 1
+            stats["recitals"] += 1
+            outcome = _store_version(conn, iid, pid, r, recitals_source_url or source_url,
+                                     point_in_time, version_label="EUR-Lex (original OJ)",
+                                     is_authentic=1, is_consolidated=0)
+            stats["versions_new" if outcome == "new" else "versions_unchanged"] += 1
     conn.commit()
     conn.close()
     stats.update(instrument_id=iid, title=title)
@@ -319,8 +354,11 @@ def main() -> None:
     ap.add_argument("--source-url", required=True, help="the consolidated fmx4 manifestation URL (provenance)")
     ap.add_argument("--point-in-time", default=None, help="ISO date the consolidated text is in force from")
     ap.add_argument("--allow-corpus", action="store_true", help="permit writing the live corpus.db")
+    ap.add_argument("--recitals-html", default=None, help="ORIGINAL OJ act HTML (EUR-Lex) for recitals")
+    ap.add_argument("--recitals-source-url", default=None, help="provenance URL for the recitals (original OJ)")
     a = ap.parse_args()
-    s = ingest(a.db, a.xml, a.source_url, a.point_in_time, a.allow_corpus)
+    s = ingest(a.db, a.xml, a.source_url, a.point_in_time, a.allow_corpus,
+               a.recitals_html, a.recitals_source_url)
     print(f"instrument #{s['instrument_id']}  Directive 2001/29/EC (InfoSoc)")
     print(f"  provisions upserted : {s['provisions']}")
     print(f"  chapters            : {s['chapters']}")

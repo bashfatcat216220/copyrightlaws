@@ -113,17 +113,23 @@ def _section_reader(conn, iid, sec):
     # Leaf kinds that rail as the reader's "sections": US/UK sections, UK schedule
     # paragraphs, and EU articles (InfoSoc). Source-derived kinds, never a jurisdiction
     # switch — the reader renders provision.label as stored ('§ 203' / 's. 12' / 'Article 5').
+    LEAVES = "('section','article','schedule_para','recital')"
     n = conn.execute("SELECT COUNT(*) FROM provisions WHERE instrument_id=? "
-                     "AND kind IN ('section','article','schedule_para')", (iid,)).fetchone()[0]
+                     f"AND kind IN {LEAVES}", (iid,)).fetchone()[0]
     if not n:
         return None, None
     rows = [dict(r) for r in conn.execute(
-        "SELECT s.id, s.label, s.heading, s.citation, "
+        "SELECT s.id, s.label, s.heading, s.citation, s.kind, "
         "  c.label AS chap_label, c.sort_int AS c_si, c.sort_suffix AS c_su "
         "FROM provisions s LEFT JOIN provisions c ON c.id=s.parent_id "
-        "WHERE s.instrument_id=? AND s.kind IN ('section','article','schedule_para') "
+        f"WHERE s.instrument_id=? AND s.kind IN {LEAVES} "
         "ORDER BY c.sort_int, c.sort_suffix COLLATE BINARY, "
         "         s.sort_int, s.sort_suffix COLLATE BINARY", (iid,))]
+    # Recitals (kind='recital') are top-level (no chapter) and precede the articles — rail
+    # them as their own group rather than under the null-chapter "Sections" bucket.
+    for r in rows:
+        if r["kind"] == "recital":
+            r["chap_label"] = "Recitals"
     sel_id = sec if sec is not None else rows[0]["id"]
     # group into the left rail by chapter, marking the active section
     rail, cur = [], None
