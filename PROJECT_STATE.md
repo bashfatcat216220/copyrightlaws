@@ -18,9 +18,11 @@ Pre-Phase-0 scaffold, now carrying the **KM IP — Statute Browser** design syst
   branch `main`. **Nothing pushed yet** (holding on the user's instruction).
 - **DB**: migration 001 **APPLIED to `corpus.db`** (Bing signed off 2026-08-12). Real law
   loaded via the approved ingests: **17 U.S.C.** (153 sections) + **CDPA 1988** (436 Body
-  sections + 349 schedule paras). 2 instruments · 8,273 provisions · 938 section versions.
-  The live server runs on `corpus.db`; the section reader shows real US + UK law.
-  InfoSoc (EU) ingest in progress (delegated agent).
+  sections + 349 schedule paras) + **InfoSoc / Directive 2001/29** (15 articles, 31
+  paragraphs, 47 points, 4 chapters). **3 instruments · 8,370 provisions · 1,031 provision
+  versions.** The live server runs on `corpus.db`; the section reader shows real US + UK +
+  EU law. (NB: the app.py rail change below needs a server RESTART to render on the running
+  8021 process — DB rows are already live; the code edit is verified in-process.)
 
 ## Done this session — UI reskin (ships now)
 
@@ -238,6 +240,45 @@ still collide (schedule sub-structure the pinpoint doesn't yet capture) — curr
 by a deterministic `#n` suffix; **real fix later = full schedule-part pinpointing in the
 CLML citation.**
 
+**InfoSoc ingest DRAFTED + APPLIED:** `src/store/ingest_formex.py` — Formex, the THIRD
+source shape (EUR-Lex CONS.ACT). Ingested into a scratch DB, then `corpus.db`
+(`--allow-corpus`, approved) and `corpus-demo.db` as **instrument #3**. Results:
+**4 chapters** (Formex `DIVISION`, roman→arabic sort) · **15 articles** (role `enacting`,
+operative text versioned at the ARTICLE level) · **31 paragraphs** · **47 points/clauses**
+(`ITEM` under `LIST` under `ALINEA` under `PARAG`). 93 provision versions, all sha256'd.
+Validated: deepest pinpoint **`Directive 2001/29 Art. 5(3)(k)`** resolves to its real text
+("use for the purpose of caricature, parody or pastiche;"); the Art. 5 -> 5(3) -> 5(3)(k)
+chain is intact; provision-FTS grounds (`reproduction`->Art. 2/5, `"communication to the
+public"`->Art. 3). **Idempotent** (re-run: 0 new versions). Depth here is exactly 3
+(article>paragraph>point) — no nested lists in this act.
+
+**Formex-specific findings:**
+1. **`is_authentic` earns its place (first real use).** The consolidated fmx4 manifestation
+   is NOT authentic law -> `_store_version` inserts version rows with **`is_authentic=0`,
+   `is_consolidated=1`, `is_official_language=1`** (English is an official EU language),
+   set EXPLICITLY (the USLM/CLML template inserts leave the authentic=1 defaults). Verified:
+   0 InfoSoc version rows have `is_authentic!=0`. `source_url` = the
+   `publications.europa.eu/resource/celex/02001L0029-20171010.ENG.fmx4` manifestation.
+2. **Recitals DEFERRED, not faked.** Per the agreed provenance split, recitals are
+   `kind='recital'`/`role='recital'` sourced from the ORIGINAL OJ act (CONSID-tagged). This
+   CONSOLIDATED artifact flattens recitals into the PREAMBLE — they are NOT individually
+   CONSID-tagged, so they are not cleanly extractable here. Rather than fabricate numbered
+   recitals (prime rule 1), **recitals are skipped with `recitals=0`**; the ingest's recital
+   path is a small addition (`kind='recital'`) when an original-OJ manifestation is supplied.
+   **Follow-up: fetch the original OJ Formex manifestation and ingest its CONSID recitals.**
+3. Article number is parsed from the trailing digits of `TI.ART` ("Article 5"->"5", survives
+   letter-suffixed insertions); paragraph number from `NO.PARAG`; point marker from
+   `ITEM>NP>NO.P` ("(k)"). Alphabetic point markers fall back to document order for the
+   ordinal, exactly as USLM/CLML do for alpha/roman levels.
+
+**Reader change (shared code):** `src/app.py` `_section_reader` — the rail's leaf-kind
+filter was `kind='section'` only (US/UK sections), so EU articles didn't rail. Generalized
+to `kind IN ('section','article','schedule_para')` (both the count guard and the rows
+query). Guarded/minimal; US `/instrument/1` and UK `/instrument/2` still render (verified
+in-process via Starlette TestClient), empty-DB fallback unaffected. EU articles now rail
+grouped by their 4 chapters. **The running 8021 uvicorn is not `--reload`, so this code edit
+needs a server restart to show on the live process** (DB rows are already live).
+
 ## Source plan — how the corpus gets added
 
 Retrieval-first, provisions-aware: a connector `discover(since)`→refs + `fetch(ref)`→official
@@ -254,9 +295,12 @@ exact URLs that returned real law, keyless, so they don't get re-discovered:
 
 **Onboarding order** = the confirmed Phase-0 slice, one per source-shape so the schema is
 stress-tested by variety, not volume:
-1. **17 U.S.C.** (USLM) — proves deep nesting + ordinal suffixes.
-2. **CDPA 1988** (CLML) — proves Body-vs-Schedule role split + inserted-section ordinals.
-3. **InfoSoc 2001/29** (Formex) — proves articles + the recital/manifestation provenance split.
+1. **17 U.S.C.** (USLM) — DONE. proves deep nesting + ordinal suffixes.
+2. **CDPA 1988** (CLML) — DONE. proves Body-vs-Schedule role split + inserted-section ordinals.
+3. **InfoSoc 2001/29** (Formex) — **DONE 2026-08-12.** proves articles + `is_authentic=0`
+   (consolidated=not authentic). Recital/manifestation split HALF-exercised: articles from
+   the consolidated act; recitals deferred to the original OJ (CONSID) manifestation — see
+   the Formex findings above.
 4. **Berne Convention** (hand-load) — proves the no-XML, hand-entered path + treaty identity.
 
 Each source lands as its own reviewable ingest run (idempotent on the `citation` natural key,

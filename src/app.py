@@ -110,15 +110,18 @@ def _has_provisions(conn) -> bool:
 def _section_reader(conn, iid, sec):
     """Provisions-aware view: chapter-grouped section rail + the selected section's text.
     Returns (rail, sel) or (None, None) if this instrument has no provisions loaded."""
-    n = conn.execute("SELECT COUNT(*) FROM provisions WHERE instrument_id=? AND kind='section'",
-                     (iid,)).fetchone()[0]
+    # Leaf kinds that rail as the reader's "sections": US/UK sections, UK schedule
+    # paragraphs, and EU articles (InfoSoc). Source-derived kinds, never a jurisdiction
+    # switch — the reader renders provision.label as stored ('§ 203' / 's. 12' / 'Article 5').
+    n = conn.execute("SELECT COUNT(*) FROM provisions WHERE instrument_id=? "
+                     "AND kind IN ('section','article','schedule_para')", (iid,)).fetchone()[0]
     if not n:
         return None, None
     rows = [dict(r) for r in conn.execute(
         "SELECT s.id, s.label, s.heading, s.citation, "
         "  c.label AS chap_label, c.sort_int AS c_si, c.sort_suffix AS c_su "
         "FROM provisions s LEFT JOIN provisions c ON c.id=s.parent_id "
-        "WHERE s.instrument_id=? AND s.kind='section' "
+        "WHERE s.instrument_id=? AND s.kind IN ('section','article','schedule_para') "
         "ORDER BY c.sort_int, c.sort_suffix COLLATE BINARY, "
         "         s.sort_int, s.sort_suffix COLLATE BINARY", (iid,))]
     sel_id = sec if sec is not None else rows[0]["id"]
