@@ -10,3 +10,6 @@ __pycache__/
 *.pyc
 logs/
 snapshots/
+
+# parsing spike — throwaway artifacts + reports (Phase-0 provisions rebuild)
+spike/

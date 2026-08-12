@@ -6,109 +6,202 @@
   <title>{% block title %}Copyright Corpus{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Display&family=Libre+Franklin:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    /* ── Design tokens (KM IP — Statute Browser handoff) ───────────────────
+       Five neutrals + two accents. Anything outside this list is a bug.
+       Navy = links & current position ONLY. Rust = amendment / expiry /
+       adverse treatment ONLY. Neither is decorative. Square corners, no
+       shadows, no gradients. Mono for every identifier, sans for interface,
+       serif for reading. */
     :root{
-      --bg:#FFFFFF; --ink:#17140F; --ink2:#3B4048; --muted:#6E7480; --muted2:#8A919C; --faint:#B9C0C8;
-      --line:#E7E7E4; --line2:#ECECEA; --navy:#16385F; --red:#A4232A; --green:#1F7A4D;
-      --slate:#17140F; --tag:#F2F2F0; --panel:#F2F2F0; --panel-border:#E4E4E0;
-      --on-slate-body:#B9C2CC; --on-slate-kicker:#8FA6C4; --on-slate-link:#D7DBE0;
-      --on-slate-meta:#8B93A3; --on-slate-line:#414A56;
-      --serif-display:'Libre Caslon Display',Georgia,serif;
+      --ink:#15171b; --body:#22252a; --body-muted:#474b52; --label:#74797f; --faint:#a7abb1;
+      --paper:#ffffff; --paper-warm:#f7f6f3; --paper-warm2:#f2f0eb;
+      --rule:#d9d5cd; --rule-light:#e8e5df;
+      --navy:#17457e; --rust:#98401b;
+      --chrome-line:#3a3e44; --chrome-border:#454a51; --chrome-faint:#6c7178; --chrome-mute:#8d9298; --chrome-soft:#a7abb1;
       --serif:'Source Serif 4',Georgia,serif;
-      --sans:'Libre Franklin',system-ui,sans-serif;
+      --sans:'IBM Plex Sans',system-ui,sans-serif;
       --mono:'IBM Plex Mono',ui-monospace,monospace;
     }
     *{box-sizing:border-box;}
     html,body{margin:0;}
-    body{font-family:var(--serif); font-size:16px; line-height:1.5; color:var(--ink);
-      background:var(--bg); border-top:4px solid var(--navy);}
-    a{color:var(--navy); text-decoration:none;} a:hover{text-decoration:underline; text-underline-offset:2px;}
+    body{font-family:var(--serif); color:var(--body); background:var(--paper); font-size:16px;}
+    a{color:var(--navy); text-decoration:none;}
+    a:hover{text-decoration:underline; text-underline-offset:2px;}
 
-    /* dark masthead bar (terminal top) */
-    .top{background:var(--slate); color:var(--on-slate-link); display:flex; align-items:baseline;
-      gap:26px; padding:12px 26px;}
-    .top .brand{font-family:var(--serif-display); font-size:21px; color:#F4F1EA; letter-spacing:.01em;}
-    .top .brand a{color:inherit;}
-    .top nav{display:flex; gap:20px; margin-left:auto;}
-    .top nav a{font-family:var(--sans); font-size:12px; font-weight:600; letter-spacing:.14em;
-      text-transform:uppercase; color:var(--on-slate-kicker);}
-    .top nav a:hover{color:#fff; text-decoration:none;}
+    /* ── Top bar (52px, dark) ─────────────────────────────────────────── */
+    .topbar{height:52px; background:var(--ink); display:flex; align-items:center;
+      gap:16px; padding:0 20px; white-space:nowrap;}
+    .wordmark{font-family:var(--serif); font-weight:600; font-size:20px; color:#fff;
+      letter-spacing:-0.01em; flex:none;}
+    .wordmark a{color:inherit;} .wordmark a:hover{text-decoration:none;}
+    .wordmark .sub{font-family:var(--sans); font-weight:500; font-size:10.5px; color:var(--chrome-soft);
+      letter-spacing:0.19em; text-transform:uppercase; margin-left:9px;}
+    .chrome-divider{width:1px; height:22px; background:var(--chrome-line); flex:none;}
+    .topnav{display:flex; gap:16px; flex:0 1 auto; overflow:hidden;}
+    .topnav a{font-family:var(--sans); font-weight:500; font-size:11px; letter-spacing:0.13em;
+      text-transform:uppercase; color:var(--chrome-mute); line-height:52px;}
+    .topnav a:hover{color:#fff; text-decoration:none;}
+    .topnav a.active{color:#fff; box-shadow:inset 0 -3px 0 0 var(--rust);}
+    .spacer{flex:1;}
+    .topsearch{flex:0 1 300px; min-width:96px; display:flex;}
+    .topsearch input{width:100%; height:30px; background:transparent; border:1px solid var(--chrome-border);
+      color:#fff; font-family:var(--mono); font-size:11.5px; padding:0 10px; border-radius:0;}
+    .topsearch input::placeholder{color:var(--chrome-mute);}
+    .topsearch input:focus{outline:none; border-color:var(--chrome-soft);}
 
-    /* standing finding-aid caveat — quiet but on every page */
-    .caveat{background:var(--panel); border-bottom:1px solid var(--panel-border);
-      border-left:3px solid var(--navy); font-family:var(--sans); font-size:12px; color:var(--ink2);
-      padding:7px 26px;}
+    /* ── Breadcrumb bar (40px) ────────────────────────────────────────── */
+    .crumbbar{height:40px; background:var(--paper); border-bottom:1px solid var(--ink);
+      display:flex; align-items:center; justify-content:space-between; padding:0 26px;
+      font-family:var(--mono); font-size:10.5px; letter-spacing:0.1em; color:var(--label);}
+    .crumbbar a{color:var(--navy);}
+    .crumbbar .counts{color:var(--label);}
 
-    /* two-column shell: jurisdiction rail + main */
-    .shell{display:grid; grid-template-columns:236px 1fr; max-width:1180px; margin:0 auto; align-items:start;}
-    .rail{position:sticky; top:0; border-right:1px solid var(--line); padding:22px 18px 40px; min-height:70vh;}
-    .rail .rgroup{font-family:var(--sans); font-size:10.5px; font-weight:700; letter-spacing:.16em;
-      text-transform:uppercase; color:var(--muted2); margin:18px 0 8px;}
-    .rail .rgroup:first-child{margin-top:0;}
-    .rrow{display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:4px;
-      font-family:var(--sans); font-size:13.5px; color:var(--ink2);}
-    .rrow:hover{background:var(--tag); color:var(--navy); text-decoration:none;}
-    .rrow.active{background:#eef2f7; color:var(--navy); font-weight:600;}
-    .rrow .dot{width:7px; height:7px; border-radius:50%; background:var(--faint); flex:none;}
-    .rrow.t1 .dot{background:var(--navy);} .rrow.t2 .dot{background:var(--green);}
-    .rrow .nm{flex:1;} .rrow .n{font-family:var(--mono); font-size:12px; color:var(--muted);}
+    /* ── Standing finding-aid caveat (prime rule 2 — on every page) ────── */
+    .caveat{background:var(--paper-warm2); border-bottom:1px solid var(--rule);
+      border-left:3px solid var(--rust); font-family:var(--sans); font-size:11.5px;
+      color:var(--body-muted); padding:7px 26px; letter-spacing:0.01em;}
 
-    main.main{padding:26px 30px 60px; min-width:0;}
-    .eyebrow{font-family:var(--sans); font-size:11px; font-weight:600; letter-spacing:.16em;
-      text-transform:uppercase; color:var(--navy);}
-    h1.title{font-family:var(--serif-display); font-weight:400; font-size:30px; line-height:1.15; margin:6px 0 4px;}
-    .lead{color:var(--muted); font-size:14px; margin:0 0 22px;}
+    /* ── Shell: jurisdiction rail + main ──────────────────────────────── */
+    .shell{display:flex; align-items:stretch; min-height:calc(100vh - 118px);}
+    .rail{width:252px; flex:none; background:var(--paper-warm2); border-right:1px solid var(--rule);}
+    .rail .rgroup{font-family:var(--mono); font-weight:500; font-size:9px; letter-spacing:0.15em;
+      text-transform:uppercase; color:var(--label); padding:16px 18px 8px;}
+    .rail .rgroup.first{border-bottom:1px solid var(--rule);}
+    .rrow{display:flex; align-items:baseline; gap:10px; padding:7px 18px 7px 14px;
+      border-bottom:1px solid var(--rule-light); border-left:4px solid transparent; color:var(--body-muted);}
+    .rrow:hover{background:var(--paper); text-decoration:none;}
+    .rrow .code{font-family:var(--mono); font-size:11px; color:var(--label); flex:none; width:26px;}
+    .rrow .nm{font-family:var(--sans); font-size:12.5px; line-height:1.35; flex:1;}
+    .rrow .n{font-family:var(--mono); font-size:10.5px; color:var(--faint);}
+    .rrow.active{background:var(--paper); border-left-color:var(--rust);}
+    .rrow.active .code{font-weight:500; color:var(--ink);}
+    .rrow.active .nm{font-weight:600; color:var(--ink);}
 
-    /* search box */
-    .searchbar{display:flex; gap:8px; margin:0 0 24px;}
-    .searchbar input{flex:1; font-family:var(--serif); font-size:15px; padding:9px 12px;
-      border:1px solid var(--line); border-radius:4px;}
-    .searchbar button{font-family:var(--sans); font-size:13px; font-weight:600; letter-spacing:.04em;
-      padding:9px 18px; border:1px solid var(--navy); background:var(--navy); color:#fff; border-radius:4px; cursor:pointer;}
+    main.main{flex:1; min-width:0;}
+    .page{padding:26px 34px 48px;}
 
-    /* citation-gutter list rows */
-    .lrow{display:grid; grid-template-columns:120px 1fr; gap:14px; padding:12px 0; border-bottom:1px solid var(--line);}
-    .lrow .cite{font-family:var(--mono); font-size:12.5px; color:var(--navy);}
-    .lrow .h{font-size:16px; font-weight:600;} .lrow .m{font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:3px;}
-    .lrow .snip{font-size:13.5px; color:var(--ink2); margin-top:5px;}
+    /* ── Reading-column vocabulary ────────────────────────────────────── */
+    .kicker{font-family:var(--mono); font-size:11px; letter-spacing:0.12em; text-transform:uppercase;
+      color:var(--rust);}
+    h1.title{font-family:var(--serif); font-weight:600; font-size:28px; line-height:1.15;
+      letter-spacing:-0.015em; margin:6px 0 6px; color:var(--ink); text-wrap:pretty;}
+    .lead{font-family:var(--sans); font-size:13px; color:var(--label); line-height:1.6; margin:0 0 22px;}
 
-    /* status chips */
-    .chip{display:inline-block; font-family:var(--sans); font-size:11px; font-weight:600;
-      letter-spacing:.03em; padding:3px 8px; border-radius:3px; margin-right:6px;}
-    .chip.green{background:#e9f3ee; color:var(--green); border:1px solid #cfe6da;}
-    .chip.amber{background:#fdf6e3; color:#8a5a00; border:1px solid #e6d9b0;}
-    .chip.navy{background:#eef2f7; color:var(--navy); border:1px solid #d5e0ee;}
+    .headrule{border-bottom:1px solid var(--ink); padding-bottom:14px; margin-bottom:20px;
+      display:flex; justify-content:space-between; align-items:flex-end; gap:24px;}
+    .headrule .rt{font-family:var(--mono); font-size:10.5px; line-height:1.6; color:var(--label);
+      text-align:right; letter-spacing:0.07em; white-space:nowrap;}
 
-    pre.lawtext{white-space:pre-wrap; font-family:var(--serif); font-size:14.5px; line-height:1.65;
-      background:#fbfaf7; border:1px solid var(--line); border-radius:5px; padding:18px 20px;}
-    .prov{font-family:var(--mono); font-size:12px; color:var(--muted); border-top:1px solid var(--line);
-      margin-top:18px; padding-top:12px;}
-    .empty{color:var(--muted); font-style:italic;}
-    table{border-collapse:collapse; width:100%; font-size:14px;}
-    td,th{border-bottom:1px solid var(--line); text-align:left; padding:8px; vertical-align:top;}
-    th{font-family:var(--sans); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);}
+    /* list rows: mono citation gutter + serif title */
+    .lrow{display:grid; grid-template-columns:132px 1fr; gap:18px; padding:9px 8px;
+      border-bottom:1px solid var(--rule-light);}
+    .lrow:hover{background:var(--paper-warm);}
+    .lrow .cite{font-family:var(--mono); font-weight:500; font-size:12.5px; color:var(--navy);}
+    .lrow .h{font-family:var(--serif); font-size:15px; line-height:1.4; color:var(--body);}
+    .lrow .h a{color:var(--ink);}
+    .lrow .m{font-family:var(--sans); font-size:11.5px; color:var(--label); margin-top:3px;}
+
+    /* flags — no chips/pills. mono caps; rust only for caveats/adverse. */
+    .flag{font-family:var(--mono); font-size:10px; letter-spacing:0.11em; text-transform:uppercase;
+      color:var(--label); margin-right:14px;}
+    .flag.warn{color:var(--rust);}
+    .flag.strong{color:var(--ink); font-weight:500;}
+
+    /* search box in-page */
+    .searchbar{display:flex; gap:0; margin:0 0 24px; max-width:560px;}
+    .searchbar input{flex:1; font-family:var(--mono); font-size:12.5px; padding:9px 12px;
+      border:1px solid var(--rule); border-right:none; border-radius:0; color:var(--body);}
+    .searchbar input:focus{outline:none; border-color:var(--ink);}
+    .searchbar button{font-family:var(--sans); font-size:11px; font-weight:600; letter-spacing:0.1em;
+      text-transform:uppercase; padding:9px 20px; border:1px solid var(--ink); background:var(--ink);
+      color:#fff; border-radius:0; cursor:pointer;}
+
+    .empty{font-family:var(--sans); font-size:12.5px; color:var(--label); line-height:1.6;}
+
+    /* data tables */
+    table{border-collapse:collapse; width:100%;}
+    th{font-family:var(--mono); font-weight:500; font-size:9px; letter-spacing:0.13em;
+      text-transform:uppercase; color:var(--label); text-align:left; padding:8px 10px;
+      border-bottom:1px solid var(--ink);}
+    td{font-family:var(--sans); font-size:12.5px; color:var(--body-muted); padding:9px 10px;
+      border-bottom:1px solid var(--rule-light); vertical-align:top;}
+    td.mono{font-family:var(--mono); font-size:11.5px; color:var(--label);}
+
+    /* ── Section reader (instrument) three-pane split ─────────────────── */
+    .reader-wrap{display:flex; align-items:stretch;}
+    .reading{flex:1; min-width:420px; padding:28px 46px 48px; background:var(--paper);
+      border-right:1px solid var(--rule);}
+    .reading .measure{max-width:660px;}
+    .reading .rhead{border-bottom:1px solid var(--ink); padding-bottom:16px; margin-bottom:18px;
+      display:flex; justify-content:space-between; align-items:flex-start; gap:24px;}
+    .reading .rhead .cite{font-family:var(--mono); font-size:13px; letter-spacing:0.04em; color:var(--rust);}
+    .reading .rhead h1{font-family:var(--serif); font-weight:600; font-size:33px; line-height:1.18;
+      letter-spacing:-0.015em; margin:6px 0 0; max-width:16em; text-wrap:pretty; color:var(--ink);}
+    .reading .rhead .status{text-align:right; white-space:nowrap;}
+    .reading .rhead .status .lbl{font-family:var(--mono); font-size:10px; letter-spacing:0.12em;
+      text-transform:uppercase; color:var(--label);}
+    .reading .rhead .status .val{font-family:var(--sans); font-weight:500; font-size:12px; color:var(--ink);}
+    .reading .rhead .status .eff{font-family:var(--mono); font-size:10.5px; color:var(--faint); margin-top:3px;}
+    .metastrip{display:flex; gap:24px; padding:11px 0; border-bottom:1px solid var(--rule);
+      font-family:var(--mono); font-size:11px; letter-spacing:0.07em; color:var(--label); flex-wrap:wrap;}
+    .metastrip a{color:var(--navy);}
+    .placeholder-banner{font-family:var(--mono); font-size:9.5px; letter-spacing:0.14em;
+      text-transform:uppercase; color:var(--faint); border-left:2px solid var(--rule);
+      padding-left:9px; margin:18px 0;}
+    .lawtext{font-family:var(--serif); font-size:16.5px; line-height:1.72; color:var(--body);
+      white-space:pre-wrap; text-wrap:pretty; margin:18px 0;}
+    .prov{border-top:1px solid var(--rule); margin-top:26px; padding-top:14px;
+      font-family:var(--mono); font-size:11px; letter-spacing:0.06em; color:var(--label); line-height:1.9;}
+    .prov a{color:var(--navy);}
+
+    /* practice panel */
+    .practice{flex:0 1 430px; min-width:230px; background:var(--paper-warm);}
+    .tabbar{height:44px; display:flex; align-items:center; gap:20px; padding:0 20px;
+      background:var(--paper-warm2); border-bottom:1px solid var(--ink);}
+    .tabbar a{font-family:var(--sans); font-size:11px; letter-spacing:0.1em; text-transform:uppercase;
+      font-weight:500; color:var(--label); line-height:44px;}
+    .tabbar a:hover{text-decoration:none; color:var(--ink);}
+    .tabbar a.active{font-weight:600; color:var(--ink); box-shadow:inset 0 -3px 0 0 var(--rust);}
+    .panelbody{padding:20px;}
+    .histrow{display:flex; gap:16px; margin-bottom:18px;}
+    .histrow .date{font-family:var(--mono); font-size:11px; color:var(--rust); width:78px; flex:none;}
+    .histrow .body{border-left:1px solid var(--rule); padding-left:16px;}
+    .histrow .body .act{font-family:var(--sans); font-weight:500; font-size:12.5px; color:var(--ink);}
+    .histrow .body .eff{font-family:var(--serif); font-size:13.5px; line-height:1.6; color:var(--body-muted); margin-top:2px;}
   </style>
 </head>
 <body>
-  <div class="top">
-    <span class="brand"><a href="/">Copyright Corpus</a></span>
-    <nav>
-      <a href="/">Browse</a>
-      <a href="/search">Search</a>
-      <a href="/matrix">Matrix</a>
+  <div class="topbar">
+    <span class="wordmark"><a href="/">Copyright Corpus</a><span class="sub">Finding Aid</span></span>
+    <span class="chrome-divider"></span>
+    <nav class="topnav">
+      <a href="/" class="{{ 'active' if active_nav == 'browse' }}">Browse</a>
+      <a href="/search" class="{{ 'active' if active_nav == 'search' }}">Search</a>
+      <a href="/matrix" class="{{ 'active' if active_nav == 'matrix' }}">Matrix</a>
     </nav>
+    <span class="spacer"></span>
+    <form class="topsearch" action="/search" method="get">
+      <input type="search" name="q" placeholder="Search the corpus" aria-label="Search the corpus">
+    </form>
   </div>
+
+  <div class="crumbbar">
+    <span class="crumb">{% block crumb %}<a href="/">CORPUS</a>{% endblock %}</span>
+    <span class="counts">{{ counts.jurisdictions }} JURISDICTIONS · {{ counts.instruments }} INSTRUMENTS · {{ counts.versions }} VERSIONS</span>
+  </div>
+
   <div class="caveat">Internal research aid. Not verified for currency. Confirm against the official
     source before relying on it in client work.</div>
 
   <div class="shell">
     <aside class="rail">
       {% for tier, rows in (jurs or {}).items() %}
-        <div class="rgroup">Tier {{ tier }}</div>
+        <div class="rgroup {{ 'first' if loop.first }}">Tier {{ tier }}</div>
         {% for j in rows %}
-          <a class="rrow t{{ tier }} {{ 'active' if active_jur == j.code }}" href="/jurisdiction/{{ j.code }}">
-            <span class="dot"></span><span class="nm">{{ j.name }}</span><span class="n">{{ j.n }}</span>
+          <a class="rrow {{ 'active' if active_jur == j.code }}" href="/jurisdiction/{{ j.code }}">
+            <span class="code">{{ j.code }}</span><span class="nm">{{ j.name }}</span><span class="n">{{ j.n }}</span>
           </a>
         {% endfor %}
       {% endfor %}

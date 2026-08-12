@@ -1,15 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Search — Copyright Corpus{% endblock %}
+{% block crumb %}<a href="/">CORPUS</a> › SEARCH{% endblock %}
 {% block body %}
-  <div class="eyebrow">Search</div>
-  <h1 class="title">Search the corpus</h1>
+<div class="page">
+  <div class="kicker">Search</div>
+  <h1 class="title">Full-text search</h1>
   <form class="searchbar" action="/search" method="get">
-    <input type="search" name="q" value="{{ q }}" placeholder="Full-text search across every version on file">
+    <input type="search" name="q" value="{{ q }}" placeholder="Every version on file · e.g. moral rights, § 512">
     <button type="submit">Search</button>
   </form>
 
   {% if q and not results %}
     <p class="empty">No matches for "{{ q }}" — the corpus may not be populated yet.</p>
+  {% elif results %}
+    <div class="headrule"><div class="rt">{{ results|length }} RESULT{{ '' if results|length == 1 else 'S' }}</div></div>
   {% endif %}
 
   {% for r in results %}
@@ -18,8 +22,9 @@
       <div>
         <div class="h"><a href="/instrument/{{ r.instrument_id }}">{{ r.title }}</a></div>
         <div class="m">{{ r.jurisdiction }}</div>
-        <div class="snip">{{ r.snip }}</div>
+        {% if r.snip %}<div class="lawtext" style="font-size:13.5px; line-height:1.6; margin:6px 0 0;">{{ r.snip }}</div>{% endif %}
       </div>
     </div>
   {% endfor %}
+</div>
 {% endblock %}

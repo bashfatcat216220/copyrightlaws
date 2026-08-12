@@ -1,50 +1,101 @@
 {% extends "base.html" %}
 {% block title %}{{ inst.title if inst else 'Instrument' }} — Copyright Corpus{% endblock %}
+{% block crumb %}<a href="/">CORPUS</a> ›
+  {% if inst %}<a href="/jurisdiction/{{ inst.jurisdiction }}">{{ inst.jurisdiction }}</a> ›
+  {{ inst.official_citation or inst.title }}{% else %}—{% endif %}{% endblock %}
 {% block body %}
-  {% if not inst %}
-    <p class="empty">No such instrument.</p>
-  {% else %}
-    <div class="eyebrow">{{ inst.jurisdiction }} · {{ inst.type }}</div>
-    <h1 class="title">{{ inst.title }}</h1>
-    <p class="lead">
-      {% if inst.official_citation %}<span class="cite" style="font-family:var(--mono);color:var(--navy);">{{ inst.official_citation }}</span>{% endif %}
-      {% if ver and ver.point_in_time %} · in force from {{ ver.point_in_time }}{% endif %}
-    </p>
+{% if not inst %}
+  <div class="page"><p class="empty">No such instrument.</p></div>
+{% else %}
+<div class="reader-wrap">
+  <section class="reading">
+    <div class="measure">
+      <div class="rhead">
+        <div>
+          {% if inst.official_citation %}<div class="cite">{{ inst.official_citation }}</div>{% endif %}
+          <h1>{{ inst.title }}</h1>
+        </div>
+        <div class="status">
+          <div class="lbl">Status</div>
+          {% if inst.status == 'in_force' %}<div class="val">In force</div>
+          {% elif inst.status == 'repealed' %}<div class="val" style="color:var(--rust);">Repealed</div>
+          {% else %}<div class="val">{{ inst.status|replace('_',' ')|title }}</div>{% endif %}
+          {% if ver and ver.point_in_time %}<div class="eff">EFFECTIVE {{ ver.point_in_time }}</div>{% endif %}
+        </div>
+      </div>
 
-    {% if ver %}
-      <p>
-        {% if inst.status == 'in_force' %}<span class="chip green">In force</span>{% endif %}
-        {% if not ver.is_authentic %}<span class="chip amber">Consolidated — not authentic</span>{% endif %}
-        {% if not ver.is_official_language %}<span class="chip amber">Unofficial translation</span>{% endif %}
-        {% if ver.has_unapplied_effects %}<span class="chip amber">May carry unapplied effects</span>{% endif %}
-      </p>
+      {% if ver %}
+        <div class="metastrip">
+          <span>{{ versions|length }} VERSION{{ '' if versions|length == 1 else 'S' }} ON FILE</span>
+          {% if not ver.is_authentic %}<span class="flag warn" style="margin:0;">Consolidated — not authentic</span>{% endif %}
+          {% if not ver.is_official_language %}<span class="flag warn" style="margin:0;">Unofficial translation</span>{% endif %}
+          {% if ver.has_unapplied_effects %}<span class="flag warn" style="margin:0;">May carry unapplied effects</span>{% endif %}
+        </div>
 
-      {% if ver.content %}
-        <pre class="lawtext">{{ ver.content }}</pre>
+        {% if ver.content %}
+          <div class="lawtext">{{ ver.content }}</div>
+        {% else %}
+          <div class="placeholder-banner">Metadata only — full text not stored. Read the statute at the official source below.</div>
+        {% endif %}
+
+        {# The two fields that matter most: source_url + retrieved_at, on every screen. #}
+        <div class="prov">
+          SOURCE&nbsp; <a href="{{ ver.source_url }}" target="_blank" rel="noopener">{{ ver.source_url }}</a><br>
+          RETRIEVED&nbsp; {{ ver.retrieved_at }}
+        </div>
       {% else %}
-        <p class="empty">Metadata only — read the full text at the official source below.</p>
+        <div class="placeholder-banner">No stored version yet for this instrument.</div>
       {% endif %}
 
-      {# The two fields that matter most: source_url + retrieved_at, on every screen. #}
-      <div class="prov">
-        SOURCE&nbsp; <a href="{{ ver.source_url }}" target="_blank" rel="noopener">{{ ver.source_url }}</a><br>
-        RETRIEVED&nbsp; {{ ver.retrieved_at }}
-      </div>
-    {% else %}
-      <p class="empty">No stored version yet for this instrument.</p>
-    {% endif %}
+      {% if versions|length > 1 %}
+        <div class="headrule" style="margin-top:34px;"><div class="kicker">Versions on file</div></div>
+        <table>
+          <tr><th>Point in time</th><th>Retrieved</th><th>Flags</th></tr>
+          {% for v in versions %}
+            <tr>
+              <td class="mono">{{ v.point_in_time or '—' }}</td>
+              <td class="mono">{{ v.retrieved_at }}</td>
+              <td>{% if not v.is_authentic %}<span class="flag warn">Not authentic</span>{% endif %}
+                  {% if not v.is_official_language %}<span class="flag warn">Translation</span>{% endif %}
+                  {% if v.is_authentic and v.is_official_language %}<span class="flag">Authentic</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% endif %}
+    </div>
+  </section>
 
-    {% if versions|length > 1 %}
-      <div class="eyebrow" style="margin-top:26px;">Versions on file</div>
-      <table>
-        <tr><th>Point in time</th><th>Retrieved</th><th>Flags</th></tr>
-        {% for v in versions %}
-          <tr><td class="cite" style="font-family:var(--mono);">{{ v.point_in_time or '—' }}</td>
-              <td>{{ v.retrieved_at }}</td>
-              <td>{% if not v.is_authentic %}not authentic {% endif %}
-                  {% if not v.is_official_language %}translation{% endif %}</td></tr>
-        {% endfor %}
-      </table>
-    {% endif %}
-  {% endif %}
+  {# Practice panel — Cases / History. Only History has a backing table today;
+     the two-tab bar is built now so the panel need not be re-laid-out when
+     case-treatment lands (see PROJECT_STATE.md → provisions rebuild). #}
+  <aside class="practice">
+    <nav class="tabbar">
+      <a href="?tab=cases" class="{{ 'active' if tab != 'history' }}">Cases · {{ cases|length }}</a>
+      <a href="?tab=history" class="{{ 'active' if tab == 'history' }}">History · {{ amendments|length }}</a>
+    </nav>
+    <div class="panelbody">
+      {% if tab == 'history' %}
+        {% if not amendments %}
+          <p class="empty">No amendment history recorded for this instrument yet. Entries land once
+            an amending instrument is linked with its effect and effective date.</p>
+        {% else %}
+          {% for a in amendments %}
+            <div class="histrow">
+              <div class="date">{{ a.effective_date or '—' }}</div>
+              <div class="body">
+                <div class="act">{{ a.amending_citation or a.amending_title or 'Amending instrument' }}</div>
+                <div class="eff">{{ a.effect or '—' }}{% if a.sections_affected %} · {{ a.sections_affected }}{% endif %}</div>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% else %}
+        <p class="empty">No decisions linked. Case treatment (followed / distinguished / criticized,
+          per provision) is a later phase — it attaches to provisions, not to the whole instrument.
+          See the provisions rebuild in PROJECT_STATE.md.</p>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+{% endif %}
 {% endblock %}

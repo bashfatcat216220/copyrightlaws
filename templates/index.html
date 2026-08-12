@@ -1,12 +1,15 @@
 {% extends "base.html" %}
+{% block crumb %}<a href="/">CORPUS</a> › BROWSE{% endblock %}
 {% block body %}
-  <div class="eyebrow">Reference · Change monitor</div>
+<div class="page">
+  <div class="kicker">Reference · Change monitor</div>
   <h1 class="title">Copyright law, consolidated and sourced</h1>
   <p class="lead">{{ stats.instruments }} instruments · {{ stats.versions }} versions ·
-    {{ stats.jurisdictions }} jurisdictions on file.</p>
+    {{ stats.jurisdictions }} jurisdictions on file. A finding aid, never a citation — every
+    version carries its source URL and retrieval date.</p>
 
   <form class="searchbar" action="/search" method="get">
-    <input type="search" name="q" placeholder="Search the corpus — e.g. term of protection, TDM exception">
+    <input type="search" name="q" placeholder="term of protection · TDM exception · § 203">
     <button type="submit">Search</button>
   </form>
 
@@ -15,7 +18,7 @@
       counts fill in once the connectors run (UK CDPA · US 17 U.S.C. / 37 C.F.R. ·
       EU directives · core treaties).</p>
   {% else %}
-    <div class="eyebrow" style="margin-bottom:6px;">Recently updated</div>
+    <div class="headrule"><div class="kicker">Recently updated</div></div>
     {% for c in recent %}
       <div class="lrow">
         <div class="cite">{{ c.official_citation or c.jurisdiction }}</div>
@@ -26,4 +29,5 @@
       </div>
     {% endfor %}
   {% endif %}
+</div>
 {% endblock %}

@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 {% block title %}{{ j.name if j else 'Jurisdiction' }} — Copyright Corpus{% endblock %}
+{% block crumb %}<a href="/">CORPUS</a> › {{ (j.code if j else code) | upper }}{% endblock %}
 {% block body %}
+<div class="page">
   {% if not j %}
     <p class="empty">No such jurisdiction.</p>
   {% else %}
-    <div class="eyebrow">Tier {{ j.tier }} · {{ j.code }}</div>
-    <h1 class="title">{{ j.name }}</h1>
+    <div class="kicker">Tier {{ j.tier }} · {{ j.code }}</div>
+    <div class="headrule">
+      <h1 class="title" style="margin-bottom:0;">{{ j.name }}</h1>
+      <div class="rt">{{ insts|length }} INSTRUMENT{{ '' if insts|length == 1 else 'S' }}</div>
+    </div>
     {% if j.notes %}<p class="lead">{{ j.notes }}</p>{% endif %}
 
     {% if not insts %}
@@ -16,13 +21,15 @@
           <div class="cite">{{ c.official_citation or c.type }}</div>
           <div>
             <div class="h"><a href="/instrument/{{ c.id }}">{{ c.title }}</a></div>
-            <div class="m">{{ c.type }}
-              {% if c.status == 'in_force' %}<span class="chip green" style="margin-left:6px;">In force</span>
-              {% elif c.status == 'repealed' %}<span class="chip amber" style="margin-left:6px;">Repealed</span>{% endif %}
+            <div class="m">
+              <span class="flag">{{ c.type }}</span>
+              {% if c.status == 'in_force' %}<span class="flag strong">In force</span>
+              {% elif c.status == 'repealed' %}<span class="flag warn">Repealed</span>{% endif %}
             </div>
           </div>
         </div>
       {% endfor %}
     {% endif %}
   {% endif %}
+</div>
 {% endblock %}

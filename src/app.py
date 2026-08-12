@@ -45,8 +45,18 @@ def _rail(conn: sqlite3.Connection) -> dict:
     return tiers
 
 
-def _ctx(conn, active_jur=None, **extra) -> dict:
-    return {"jurs": _rail(conn), "active_jur": active_jur, **extra}
+def _counts(conn: sqlite3.Connection) -> dict:
+    """Live corpus counts for the breadcrumb bar (honest, computed — never hardcoded)."""
+    return {
+        "jurisdictions": conn.execute("SELECT COUNT(*) FROM jurisdictions").fetchone()[0],
+        "instruments": conn.execute("SELECT COUNT(*) FROM instruments").fetchone()[0],
+        "versions": conn.execute("SELECT COUNT(*) FROM versions").fetchone()[0],
+    }
+
+
+def _ctx(conn, active_jur=None, active_nav=None, **extra) -> dict:
+    return {"jurs": _rail(conn), "active_jur": active_jur, "active_nav": active_nav,
+            "counts": _counts(conn), **extra}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -60,7 +70,8 @@ def index(request: Request):
     recent = [dict(r) for r in conn.execute(
         "SELECT id, title, official_citation, jurisdiction FROM instruments "
         "ORDER BY last_updated_at DESC LIMIT 12")]
-    return templates.TemplateResponse(request, "index.html", _ctx(conn, stats=stats, recent=recent))
+    return templates.TemplateResponse(request, "index.html",
+                                      _ctx(conn, active_nav="browse", stats=stats, recent=recent))
 
 
 @app.get("/search", response_class=HTMLResponse)
@@ -76,7 +87,8 @@ def search(request: Request, q: str = ""):
                 "FROM versions_fts f JOIN versions v ON v.id=f.rowid "
                 "JOIN instruments i ON i.id=v.instrument_id "
                 "WHERE versions_fts MATCH ? ORDER BY rank LIMIT 50", (toks,)).fetchall()]
-    return templates.TemplateResponse(request, "search.html", _ctx(conn, q=q, results=results))
+    return templates.TemplateResponse(request, "search.html",
+                                      _ctx(conn, active_nav="search", q=q, results=results))
 
 
 @app.get("/jurisdiction/{code}", response_class=HTMLResponse)
@@ -91,7 +103,7 @@ def jurisdiction(request: Request, code: str):
 
 
 @app.get("/instrument/{iid}", response_class=HTMLResponse)
-def instrument(request: Request, iid: int):
+def instrument(request: Request, iid: int, tab: str = "cases"):
     conn = _conn()
     inst = conn.execute("SELECT * FROM instruments WHERE id=?", (iid,)).fetchone()
     ver = conn.execute("SELECT * FROM versions WHERE instrument_id=? AND is_current=1 "
@@ -99,10 +111,20 @@ def instrument(request: Request, iid: int):
     versions = [dict(r) for r in conn.execute(
         "SELECT id, point_in_time, retrieved_at, is_authentic, is_official_language "
         "FROM versions WHERE instrument_id=? ORDER BY point_in_time DESC", (iid,))]
+    # History tab: amendments TO this instrument, with the amending instrument's cite/title.
+    amendments = [dict(r) for r in conn.execute(
+        "SELECT a.effective_date, a.effect, a.sections_affected, "
+        "  ai.official_citation AS amending_citation, ai.title AS amending_title "
+        "FROM amendments a LEFT JOIN instruments ai ON ai.id=a.amending_instrument "
+        "WHERE a.amended_instrument=? ORDER BY a.effective_date DESC", (iid,))]
+    # Cases tab: no case-treatment table yet (arrives with the provisions rebuild) — empty by design.
+    cases: list = []
+    tab = "history" if tab == "history" else "cases"
     active = inst["jurisdiction"] if inst else None
     return templates.TemplateResponse(request, "instrument.html",
                                       _ctx(conn, active_jur=active, inst=dict(inst) if inst else None,
-                                           ver=dict(ver) if ver else None, versions=versions))
+                                           ver=dict(ver) if ver else None, versions=versions,
+                                           amendments=amendments, cases=cases, tab=tab))
 
 
 @app.get("/matrix", response_class=HTMLResponse)
@@ -111,4 +133,5 @@ def matrix(request: Request):
     cells = [dict(r) for r in conn.execute(
         "SELECT jurisdiction, attribute, value, verified_by FROM matrix_cells "
         "ORDER BY attribute, jurisdiction")]
-    return templates.TemplateResponse(request, "matrix.html", _ctx(conn, cells=cells))
+    return templates.TemplateResponse(request, "matrix.html",
+                                      _ctx(conn, active_nav="matrix", cells=cells))
