@@ -2,11 +2,93 @@
 {% block title %}{{ inst.title if inst else 'Instrument' }} — Copyright Corpus{% endblock %}
 {% block crumb %}<a href="/">CORPUS</a> ›
   {% if inst %}<a href="/jurisdiction/{{ inst.jurisdiction }}">{{ inst.jurisdiction }}</a> ›
-  {{ inst.official_citation or inst.title }}{% else %}—{% endif %}{% endblock %}
+  {{ inst.official_citation or inst.title }}{% if sel %} › {{ sel.label }}{% endif %}{% else %}—{% endif %}{% endblock %}
+
+{% macro practice_panel(tab, cases, amendments, sec_id) %}
+  {% set q = '?sec=' ~ sec_id ~ '&' if sec_id else '?' %}
+  <aside class="practice">
+    <nav class="tabbar">
+      <a href="{{ q }}tab=cases" class="{{ 'active' if tab != 'history' }}">Cases · {{ cases|length }}</a>
+      <a href="{{ q }}tab=history" class="{{ 'active' if tab == 'history' }}">History · {{ amendments|length }}</a>
+    </nav>
+    <div class="panelbody">
+      {% if tab == 'history' %}
+        {% if not amendments %}
+          <p class="empty">No amendment history recorded for this instrument yet. Entries land once
+            an amending instrument is linked with its effect and effective date.</p>
+        {% else %}
+          {% for a in amendments %}
+            <div class="histrow">
+              <div class="date">{{ a.effective_date or '—' }}</div>
+              <div class="body">
+                <div class="act">{{ a.amending_citation or a.amending_title or 'Amending instrument' }}</div>
+                <div class="eff">{{ a.effect or '—' }}{% if a.sections_affected %} · {{ a.sections_affected }}{% endif %}</div>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% else %}
+        <p class="empty">No decisions linked. Case treatment (followed / distinguished / criticized,
+          per provision) is a later phase — it attaches to provisions, not to the whole instrument.
+          See the provisions rebuild in PROJECT_STATE.md.</p>
+      {% endif %}
+    </div>
+  </aside>
+{% endmacro %}
+
 {% block body %}
 {% if not inst %}
   <div class="page"><p class="empty">No such instrument.</p></div>
+
+{% elif rail %}
+{# ── Provisions loaded: chapter-grouped section rail + section reader ── #}
+<div class="reader-wrap">
+  <nav class="secrail">
+    <a class="secrail-back" href="/jurisdiction/{{ inst.jurisdiction }}">← {{ inst.official_citation or inst.title }}</a>
+    {% for grp in rail %}
+      <div class="secrail-chap">{{ grp.chap_label or 'Sections' }}</div>
+      {% for s in grp.sections %}
+        <a class="secrow {{ 'active' if s.active }}" href="/instrument/{{ inst.id }}?sec={{ s.id }}">
+          <span class="secnum">{{ s.label }}</span><span class="secttl">{{ s.heading or '—' }}</span>
+        </a>
+      {% endfor %}
+    {% endfor %}
+  </nav>
+
+  <section class="reading">
+    <div class="measure">
+      <div class="rhead">
+        <div>
+          <div class="cite">{{ sel.citation }}</div>
+          <h1>{{ sel.heading or sel.label }}</h1>
+        </div>
+        <div class="status">
+          <div class="lbl">Status</div>
+          {% if sel.status == 'repealed' %}<div class="val" style="color:var(--rust);">Repealed</div>
+          {% else %}<div class="val">In force</div>{% endif %}
+        </div>
+      </div>
+
+      {% if sel.content %}
+        <div class="lawtext">{{ sel.content }}</div>
+      {% else %}
+        <div class="placeholder-banner">Metadata only — read the section at the official source below.</div>
+      {% endif %}
+
+      {% if sel.source_url %}
+        <div class="prov">
+          SOURCE&nbsp; <a href="{{ sel.source_url }}" target="_blank" rel="noopener">{{ sel.source_url }}</a><br>
+          RETRIEVED&nbsp; {{ sel.retrieved_at }}
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  {{ practice_panel(tab, cases, amendments, sel.id) }}
+</div>
+
 {% else %}
+{# ── No provisions loaded: whole-instrument reader (today's default) ── #}
 <div class="reader-wrap">
   <section class="reading">
     <div class="measure">
@@ -46,56 +128,10 @@
       {% else %}
         <div class="placeholder-banner">No stored version yet for this instrument.</div>
       {% endif %}
-
-      {% if versions|length > 1 %}
-        <div class="headrule" style="margin-top:34px;"><div class="kicker">Versions on file</div></div>
-        <table>
-          <tr><th>Point in time</th><th>Retrieved</th><th>Flags</th></tr>
-          {% for v in versions %}
-            <tr>
-              <td class="mono">{{ v.point_in_time or '—' }}</td>
-              <td class="mono">{{ v.retrieved_at }}</td>
-              <td>{% if not v.is_authentic %}<span class="flag warn">Not authentic</span>{% endif %}
-                  {% if not v.is_official_language %}<span class="flag warn">Translation</span>{% endif %}
-                  {% if v.is_authentic and v.is_official_language %}<span class="flag">Authentic</span>{% endif %}</td>
-            </tr>
-          {% endfor %}
-        </table>
-      {% endif %}
     </div>
   </section>
 
-  {# Practice panel — Cases / History. Only History has a backing table today;
-     the two-tab bar is built now so the panel need not be re-laid-out when
-     case-treatment lands (see PROJECT_STATE.md → provisions rebuild). #}
-  <aside class="practice">
-    <nav class="tabbar">
-      <a href="?tab=cases" class="{{ 'active' if tab != 'history' }}">Cases · {{ cases|length }}</a>
-      <a href="?tab=history" class="{{ 'active' if tab == 'history' }}">History · {{ amendments|length }}</a>
-    </nav>
-    <div class="panelbody">
-      {% if tab == 'history' %}
-        {% if not amendments %}
-          <p class="empty">No amendment history recorded for this instrument yet. Entries land once
-            an amending instrument is linked with its effect and effective date.</p>
-        {% else %}
-          {% for a in amendments %}
-            <div class="histrow">
-              <div class="date">{{ a.effective_date or '—' }}</div>
-              <div class="body">
-                <div class="act">{{ a.amending_citation or a.amending_title or 'Amending instrument' }}</div>
-                <div class="eff">{{ a.effect or '—' }}{% if a.sections_affected %} · {{ a.sections_affected }}{% endif %}</div>
-              </div>
-            </div>
-          {% endfor %}
-        {% endif %}
-      {% else %}
-        <p class="empty">No decisions linked. Case treatment (followed / distinguished / criticized,
-          per provision) is a later phase — it attaches to provisions, not to the whole instrument.
-          See the provisions rebuild in PROJECT_STATE.md.</p>
-      {% endif %}
-    </div>
-  </aside>
+  {{ practice_panel(tab, cases, amendments, none) }}
 </div>
 {% endif %}
 {% endblock %}

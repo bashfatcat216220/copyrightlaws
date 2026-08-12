@@ -102,29 +102,72 @@ def jurisdiction(request: Request, code: str):
                                       _ctx(conn, active_jur=code, j=dict(j) if j else None, insts=insts))
 
 
+def _has_provisions(conn) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='provisions'"
+                        ).fetchone() is not None
+
+
+def _section_reader(conn, iid, sec):
+    """Provisions-aware view: chapter-grouped section rail + the selected section's text.
+    Returns (rail, sel) or (None, None) if this instrument has no provisions loaded."""
+    n = conn.execute("SELECT COUNT(*) FROM provisions WHERE instrument_id=? AND kind='section'",
+                     (iid,)).fetchone()[0]
+    if not n:
+        return None, None
+    rows = [dict(r) for r in conn.execute(
+        "SELECT s.id, s.label, s.heading, s.citation, "
+        "  c.label AS chap_label, c.sort_int AS c_si, c.sort_suffix AS c_su "
+        "FROM provisions s LEFT JOIN provisions c ON c.id=s.parent_id "
+        "WHERE s.instrument_id=? AND s.kind='section' "
+        "ORDER BY c.sort_int, c.sort_suffix COLLATE BINARY, "
+        "         s.sort_int, s.sort_suffix COLLATE BINARY", (iid,))]
+    sel_id = sec if sec is not None else rows[0]["id"]
+    # group into the left rail by chapter, marking the active section
+    rail, cur = [], None
+    for r in rows:
+        r["active"] = (r["id"] == sel_id)
+        if cur is None or cur["chap_label"] != r["chap_label"]:
+            cur = {"chap_label": r["chap_label"], "sections": []}
+            rail.append(cur)
+        cur["sections"].append(r)
+    sel = conn.execute(
+        "SELECT p.id, p.label, p.heading, p.citation, p.status, v.content, v.source_url, v.retrieved_at "
+        "FROM provisions p LEFT JOIN versions v ON v.provision_id=p.id AND v.is_current=1 "
+        "WHERE p.id=?", (sel_id,)).fetchone()
+    return rail, (dict(sel) if sel else None)
+
+
 @app.get("/instrument/{iid}", response_class=HTMLResponse)
-def instrument(request: Request, iid: int, tab: str = "cases"):
+def instrument(request: Request, iid: int, tab: str = "cases", sec: int | None = None):
     conn = _conn()
     inst = conn.execute("SELECT * FROM instruments WHERE id=?", (iid,)).fetchone()
     ver = conn.execute("SELECT * FROM versions WHERE instrument_id=? AND is_current=1 "
+                       "AND provision_id IS NULL ORDER BY point_in_time DESC LIMIT 1"
+                       if _has_provisions(conn) else
+                       "SELECT * FROM versions WHERE instrument_id=? AND is_current=1 "
                        "ORDER BY point_in_time DESC LIMIT 1", (iid,)).fetchone()
     versions = [dict(r) for r in conn.execute(
         "SELECT id, point_in_time, retrieved_at, is_authentic, is_official_language "
+        "FROM versions WHERE instrument_id=? AND provision_id IS NULL "
+        "ORDER BY point_in_time DESC" if _has_provisions(conn) else
+        "SELECT id, point_in_time, retrieved_at, is_authentic, is_official_language "
         "FROM versions WHERE instrument_id=? ORDER BY point_in_time DESC", (iid,))]
+    # Provision-aware section reader (only when provisions are loaded for this instrument).
+    rail, sel = (_section_reader(conn, iid, sec) if inst and _has_provisions(conn) else (None, None))
     # History tab: amendments TO this instrument, with the amending instrument's cite/title.
     amendments = [dict(r) for r in conn.execute(
         "SELECT a.effective_date, a.effect, a.sections_affected, "
         "  ai.official_citation AS amending_citation, ai.title AS amending_title "
         "FROM amendments a LEFT JOIN instruments ai ON ai.id=a.amending_instrument "
         "WHERE a.amended_instrument=? ORDER BY a.effective_date DESC", (iid,))]
-    # Cases tab: no case-treatment table yet (arrives with the provisions rebuild) — empty by design.
-    cases: list = []
+    cases: list = []  # case-treatment arrives with the provisions rebuild — empty by design
     tab = "history" if tab == "history" else "cases"
     active = inst["jurisdiction"] if inst else None
     return templates.TemplateResponse(request, "instrument.html",
                                       _ctx(conn, active_jur=active, inst=dict(inst) if inst else None,
                                            ver=dict(ver) if ver else None, versions=versions,
-                                           amendments=amendments, cases=cases, tab=tab))
+                                           amendments=amendments, cases=cases, tab=tab,
+                                           rail=rail, sel=sel))
 
 
 @app.get("/matrix", response_class=HTMLResponse)

@@ -209,6 +209,21 @@ build the provisions reader until Bing signs off on this delta.
 case_treatment tables, `versions.provision_id`, ordinal collation, role CHECK, FTS over
 provision text. Review artifact only; do NOT run against `corpus.db` until sign-off.
 
+**Ingest DRAFTED (not applied to corpus):** `src/store/ingest_uslm.py` — provision-aware,
+re-runnable 17 U.S.C. ingest. Refuses to write `corpus.db` without `--allow-corpus`; requires
+migration 001. Validated on a scratch DB (schema+migration+seed, then ingest): **3,118
+provisions** (15 chapters … 153 sections … down to subitem), **153 section versions**
+(sha256'd), provision-FTS grounded (`fair use`→§107, `termination`→§203). **Idempotent** —
+a second run inserts 0 new versions. Deep pinpoint `§ 104A(d)(2)(A)(i)` resolves; `§ 106A`
+sorts between `§ 106` and `§ 107`.
+
+**Two schema fixes the ingest CAUGHT (folded into migration 001) — why we draft the ingest
+before freezing:**
+1. `versions` UNIQUE was `(instrument_id, point_in_time, language)` — collides once many
+   provisions of one instrument share a point-in-time. Rebuilt to include `provision_id`.
+2. `kind` CHECK was missing USLM's deep levels (`subclause`/`item`/`subitem`/`subpart`).
+   Extended. (17 U.S.C. nests 4 below the section.)
+
 ## Source plan — how the corpus gets added
 
 Retrieval-first, provisions-aware: a connector `discover(since)`→refs + `fetch(ref)`→official

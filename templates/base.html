@@ -129,6 +129,23 @@
       border-bottom:1px solid var(--rule-light); vertical-align:top;}
     td.mono{font-family:var(--mono); font-size:11.5px; color:var(--label);}
 
+    /* ── Section rail (provisions: chapter-grouped sections) ──────────── */
+    .secrail{width:248px; flex:none; background:var(--paper-warm2); border-right:1px solid var(--rule);
+      max-height:calc(100vh - 118px); overflow-y:auto;}
+    .secrail-back{display:block; font-family:var(--mono); font-size:10.5px; letter-spacing:0.06em;
+      color:var(--navy); padding:14px 18px; border-bottom:1px solid var(--rule);}
+    .secrail-back:hover{text-decoration:none; background:var(--paper);}
+    .secrail-chap{font-family:var(--mono); font-weight:500; font-size:9px; letter-spacing:0.14em;
+      text-transform:uppercase; color:var(--label); padding:14px 18px 7px;}
+    .secrow{display:flex; gap:10px; align-items:baseline; padding:6px 18px 6px 14px;
+      border-bottom:1px solid var(--rule-light); border-left:4px solid transparent; color:var(--body-muted);}
+    .secrow:hover{background:var(--paper); text-decoration:none;}
+    .secrow .secnum{font-family:var(--mono); font-size:11px; color:var(--navy); flex:none; width:52px;}
+    .secrow .secttl{font-family:var(--sans); font-size:12px; line-height:1.35;}
+    .secrow.active{background:var(--paper); border-left-color:var(--rust);}
+    .secrow.active .secnum{font-weight:500; color:var(--ink);}
+    .secrow.active .secttl{font-weight:600; color:var(--ink);}
+
     /* ── Section reader (instrument) three-pane split ─────────────────── */
     .reader-wrap{display:flex; align-items:stretch;}
     .reading{flex:1; min-width:420px; padding:28px 46px 48px; background:var(--paper);
