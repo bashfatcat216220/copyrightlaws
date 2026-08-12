@@ -107,29 +107,50 @@ pulls these live is not yet built — that's the automation step for change-moni
 - **Treaty/article rail group label** — ungrouped provisions (Berne articles) render under a
   generic header; could label per instrument type.
 
-## Next steps — roadmap & recommendation
+## Next steps — roadmap
 
-Per CLAUDE.md's phased roadmap; Phase 0 done, now branching into corpus expansion + monitoring.
+**Sequencing decision (Bing, 2026-08-12): breadth before depth.** Phase 2 = fill the corpus
+with jurisdictions (full text), THEN add the depth layers. The reader already mixes shallow
+and deep instruments (whole-instrument fallback when an instrument has no provisions), so
+breadth can land incrementally.
 
-**▶ Recommended next: Phase 2 — change monitoring.** This is where the tool earns its keep
-(and where partners start caring per CLAUDE.md), and the schema is already built for it: every
-provision version carries `content_sha256`. Build `src/monitor/`: re-fetch a source → parse →
-diff per-provision sha → write an `alerts` row (old_version→new_version) → render a redline
-in the reader / a digest. Pairs naturally with building the first real **connector**
-(`discover(since)`/`fetch`) so re-fetch is automated rather than manual artifact-swapping.
+**▶ Phase 2 — jurisdiction breadth (full text, ~18 jurisdictions). IN PROGRESS.**
+Finish Tier-1, then add the 14 Tier-2 countries with real provision text. No Tier-3 long
+tail / WIPO-Lex metadata index yet (that's a later, shallower pass).
+- **Finish Tier-1:**
+  - **US 37 C.F.R.** (Copyright Office regs, parts 201–212) — eCFR API, keyless. New shape → new ingest.
+  - **EU directives** — DSM 2019/790, Software 2009/24, Database 96/9, Term 2006/116,
+    Rental/Lending 2006/115, Orphan Works 2012/28, Enforcement 2004/48. **Reuse
+    `ingest_formex.py`** — needs a small generalization: the instrument identity (CELEX/title)
+    is currently hardcoded to InfoSoc; parameterize it, then it's fetch-CELEX-and-run.
+  - **Core treaties** — TRIPS (WTO), WCT, WPPT, Rome, Beijing, Marrakesh. Reuse the
+    `ingest_berne.py` WIPO-Lex HTML pattern (TRIPS is WTO-hosted).
+- **Tier-2 countries (the jurisdiction fill):** DE ✅, then FR, ES, IT, NL, CA, AU, JP, CN,
+  KR, IN, BR, MX, SG. **Reality check (from the DE proof):** Tier-2 is HETEROGENEOUS — no
+  single reusable parser. Sources differ (WIPO Lex is PDF-only for DE; the clean text was the
+  national portal gesetze-im-internet.de), structures differ (DE §-Sections in Divisions; FR
+  Articles L111-1…; etc.), and most are UNOFFICIAL translations → `is_official_language=0`
+  (flagged). So each country = its own source hunt + bespoke parser, but the DB-writer +
+  provision model are identical.
+  - **DE DONE (2026-08-12):** `src/store/ingest_de_urhg.py` — 252 sections (20a…20d ordinal),
+    Part/Division/Subdivision→part/chapter/subchapter, `is_official_language=0`. FTS
+    `pastiche`→§51a. Idempotent. Instrument #5, live.
+  - **Remaining 13:** best done as a fan-out (parallel agents, one per country — like the
+    InfoSoc build), each finding the country's cleanest English source and writing its parser.
+  - **Refactor opportunity before the fan-out:** the 5 ingests now share ~identical
+    `_upsert_instrument`/`_upsert_provision`/`_store_version`. Extract a `src/store/_common.py`
+    so each new country ingest is just a `parse()` + an INSTRUMENT dict — makes the fan-out
+    clean and keeps agents from re-deriving the writer.
 
-**Also queued (any order):**
-- **Phase 1 — finish Tier-1 corpus:** 37 C.F.R. (eCFR, keyless), EU **DSM 2019/790** + the
-  other copyright directives (reuse `ingest_formex.py`), and the remaining core treaties
-  (TRIPS/WCT/WPPT/Rome/Beijing/Marrakesh via WIPO — reuse the Berne HTML pattern).
-- **Cases tab → real data:** populate `case_treatment` (per-provision decisions,
-  followed/distinguished/criticized) so the practice panel's second tab lights up. Needs a
-  case source + the treatment-colour vocabulary (rust = adverse) already speced.
-- **Deep-linkable provision URLs** (`/instrument/{id}/{citation}`) — a hard requirement for
-  the attorney audience; today it's `?sec=<id>`.
-- **Comparative matrix (Phase 4 groundwork):** point `matrix_cells.source_version` at a
-  provision-scoped version so a cell's pinpoint is a real section; keep it human-gated.
-- **Own venv + hosting decision** (still borrowing `~/Julie/ai-law-portal/.venv`; local vs Render).
+**Phase 3+ — the depth layers (deferred until breadth lands):**
+- **Change monitoring** — re-fetch → per-provision `content_sha256` diff → `alerts` → redline/
+  digest (`src/monitor/`), paired with real `discover`/`fetch` connectors so re-fetch is automated.
+- **Cases tab → real data** (`case_treatment`, per-provision treatment; rust = adverse).
+- **Deep-linkable provision URLs** (`/instrument/{id}/{citation}`; today `?sec=<id>`).
+- **Comparative matrix** — point `matrix_cells.source_version` at a provision-scoped version;
+  human-gated.
+- **Tier-3 metadata index** (WIPO Lex, ~190 jurisdictions, link-only, "not maintained").
+- **Own venv + hosting** (still borrowing `~/Julie/ai-law-portal/.venv`; local vs Render).
 
 ## Decisions still pending (from CLAUDE.md)
 - Hosting (local vs Render); own venv vs. borrowing ai-law-portal's.
