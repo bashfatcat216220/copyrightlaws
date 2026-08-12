@@ -4,322 +4,137 @@
 
 _Last updated: 2026-08-12._
 
-## Where we are
+## Where we are (one breath)
 
-Pre-Phase-0 scaffold, now carrying the **KM IP — Statute Browser** design system.
+**Phase 0 is COMPLETE.** The KM IP — Statute Browser design is live over a section-level
+`provisions` model, with real copyright law from all four Tier-1 source shapes ingested,
+searchable, and cited at the provision level. Migration applied to `corpus.db`; branch pushed.
 
-- **Location moved**: the repo lives at `~/TIngey/copyright-corpus` (reorganized from
-  `~/copyright-corpus` on 2026-08-12). Note: `~/TIngey/copyright-news-site` is a
-  SEPARATE, UNRELATED project that merely shares the `TIngey/` parent — do not conflate
-  or remix the two. The
-  relocated shared venvs are `~/Julie/ai-law-portal/.venv` (has fastapi/uvicorn/jinja2 —
-  use this) and `~/Litigation/multi-agent-document-review/.venv` (no web deps).
-- **Git**: remote `origin` = https://github.com/bashfatcat216220/copyrightlaws.git,
-  branch `main`. **Nothing pushed yet** (holding on the user's instruction).
-- **DB**: migration 001 **APPLIED to `corpus.db`** (Bing signed off 2026-08-12). The Phase-0
-  Tier-1 slice is COMPLETE — all four source shapes loaded via the approved ingests:
-  **17 U.S.C.** (USLM; 153 sections) + **CDPA 1988** (CLML; 436 Body sections + 349 schedule
-  paras) + **InfoSoc / Directive 2001/29** (Formex; 15 articles + **61 recitals**) + **Berne
-  Convention** (WIPO Lex HTML hand-load; 53 articles incl. bis/ter + roman Appendix, 250
-  paragraphs). **4 instruments · 8,734 provisions · 1,145 provision versions.** The live
-  server runs on `corpus.db`; the section reader shows real US + UK + EU + INT law.
+- **Corpus (live in `corpus.db`):** 4 instruments · **8,734 provisions** · **1,145 provision
+  versions**, every version SHA-256'd with `source_url` + `retrieved_at`.
+  | Jur | Instrument | Shape | Loaded |
+  |---|---|---|---|
+  | US | 17 U.S.C. | USLM XML | 15 chapters · 153 sections (nests 4 deep) |
+  | UK | CDPA 1988 | CLML XML | 436 Body sections + 349 schedule paragraphs |
+  | EU | Directive 2001/29 (InfoSoc) | Formex XML + OJ HTML | 4 chapters · 15 articles + **61 recitals** |
+  | INT | Berne Convention (Paris 1971) | WIPO Lex HTML | 53 articles (bis/ter + roman Appendix) + 250 paras |
+- **Live server:** `uvicorn src.app:app` on `corpus.db`, http://127.0.0.1:8021 — the section
+  reader shows real US/UK/EU/INT law; search is grounded (`fair use`→§107, `parody`→Art.5(3)(k)).
+- **Git:** `main` pushed to `origin` (github.com/bashfatcat216220/copyrightlaws.git); latest
+  `0b6f06c`. `pytest` 6/6.
+- **Environment:** repo at `~/TIngey/copyright-corpus`; run python via
+  `~/Julie/ai-law-portal/.venv/bin/python` (fastapi/uvicorn/jinja2). No `sqlite3` CLI on this
+  box — use Python's `sqlite3`. `~/TIngey/copyright-news-site` is a SEPARATE project — never
+  conflate. `db/corpus.db` + `db/corpus-demo.db` + `spike/` are gitignored (rebuildable/local).
 
-## Done this session — UI reskin (ships now)
+## What's built (this session)
 
-Rebuilt the web layer to the design handoff's visual system, against the EXISTING
-multi-jurisdiction IA (jurisdiction rail → instrument → version). Source of the design:
-`~/Downloads/IP Professionals Legal Platform(1).zip` (a Claude-made design handoff;
-extracted to `/tmp/ip-design-inspect` for inspection — inspected, not executed).
+1. **UI reskin** → the design handoff's system (`~/Downloads/IP Professionals Legal
+   Platform(1).zip`). `templates/*`: Source Serif 4 (reading) / IBM Plex Sans (interface) /
+   IBM Plex Mono (identifiers); Navy = links/position only, Rust = adverse only; square
+   corners, no shadows, no chips. Dark top bar + breadcrumb (live counts) + the standing
+   finding-aid caveat on every page. NOTHING from the mockup's fake prose/cases/"VERIFIED"
+   line was copied (prime rule 1).
+2. **Provisions schema** — `db/migrations/001_provisions_rebuild.sql`, **APPLIED to
+   `corpus.db`** (Bing signed off 2026-08-12). Adds `provisions` (the section tree),
+   `case_treatment`, `provisions_fts`; rebuilt `versions` to hang off `provision_id`. See
+   "Key decisions" for the shape.
+3. **Four re-runnable, idempotent ingests** in `src/store/` (each refuses `corpus.db` without
+   `--allow-corpus`; keyed on stable `citation` so re-parses never duplicate):
+   `ingest_uslm.py` (US), `ingest_clml.py` (UK), `ingest_formex.py` (EU articles + recitals),
+   `ingest_berne.py` (treaty HTML). They read retained source artifacts from `spike/artifacts/`.
+4. **Section-level reader** — `src/app.py` `_section_reader`: chapter-grouped rail of leaf
+   provisions (`kind IN ('section','article','schedule_para','recital')`) + reading column +
+   Cases/History practice panel. Guarded — falls back to whole-instrument view when an
+   instrument has no provisions, so an empty DB still renders.
 
-- `templates/base.html` — full token rewrite: Source Serif 4 (reading) / IBM Plex Sans
-  (interface) / IBM Plex Mono (every identifier); five neutrals + Navy (links & current
-  position only) + Rust (amendment/expiry/adverse only); **square corners, no shadows, no
-  chips/pills**. Dark 52px top bar, 40px breadcrumb with **live** corpus counts (never
-  hardcoded), the standing finding-aid caveat on every page, paper-warm jurisdiction rail
-  with a rust keyline on the active row.
-- `templates/instrument.html` — the design's **three-pane section reader**: reading column
-  (max 660px, 16.5px/1.72 serif measure) + provenance (source_url + retrieved_at) + a
-  **practice panel with a Cases / History tab bar**. History is backed by `amendments`;
-  Cases is an honest empty-state today. The two-tab bar is built NOW so the panel need not
-  be re-laid-out when case-treatment lands.
-- `templates/{index,jurisdiction,search,matrix}.html` — restyled to the same vocabulary;
-  status/flags carried by mono-caps + keyline (chips removed).
-- `src/app.py` — `_counts()` + `_ctx(active_nav=…)` for the chrome; instrument route now
-  loads `amendments` (joined to the amending instrument's cite/title) and takes `?tab=`.
+## Key decisions & findings (durable — the "why")
 
-**What was intentionally NOT copied from the mockup**: its fake statutory prose, fictional
-cases, fake citing-decision counts, and the fake "VERIFIED 08 AUG 2026 …" chrome line. The
-handoff itself flags all of these as placeholder; our prime rule 1 forbids them.
+- **Provisions model.** One generic tree serves every jurisdiction (US section, UK section
+  **and** schedule paragraph, EU article, treaty article — all provisions). `versions` hang
+  off a provision → per-provision text, diff (`content_sha256`), and pinpoint citation.
+- **`role` enum, not an `operative` boolean.** `enacting` / `schedule` (both operative,
+  counted & diffed) / `recital` (interpretive — addressable + searchable, never counted) /
+  `quoted` (other instruments' words — never surfaced). A boolean was too coarse: recitals
+  and quoted-amendment text are both "non-operative" but must behave differently.
+- **Ordinal = `(sort_int, sort_suffix COLLATE BINARY)`**, never a bare integer. Handles
+  inserted/suffixed provisions across all shapes: US §106A (between 106/107), UK §296ZA,
+  Berne Art. 6bis. Collation is PINNED (296Z<296ZA<296ZEA sorts right only under binary).
+- **Non-operative axis = QUOTED/AMENDING text, NOT Body-vs-Schedule.** UK Schedules are
+  operative law (Sch 1 transitional term, Sch 2 permitted acts) → `kind='schedule_para'`,
+  separate numbering class. Only `quotedContent`/`BlockAmendment`/`Quotation` (reproducing
+  OTHER acts) are skipped.
+- **`is_authentic` earns its place.** EU consolidated articles are `is_authentic=0`; EU
+  recitals (from the original OJ) and Berne treaty text are `is_authentic=1`. InfoSoc proves
+  the split WITHIN one instrument: authentic recitals alongside non-authentic consolidated
+  articles, each with its own `source_url`.
+- **Labels are source-given per node**, never inferred from a jurisdiction switch — that's
+  what keeps it one design across US/UK/EU/INT.
+- **Nav hierarchy has 4 tiers, do NOT collapse:** Jurisdiction rail → Instrument →
+  Provision d1 (chapters) → Provision d2 (sections/articles) → deeper addressable pinpoints.
+- **Drafting each ingest caught real schema/parse bugs before they bit** — that's the point:
+  versions UNIQUE needed `provision_id`; `kind` CHECK needed USLM's deep levels; CDPA
+  Schedule-1 Parts had to preserve schedule context; InfoSoc recitals live in the original OJ
+  (the `legal-content/…/XML` endpoint returns a CELLAR *notice*, not the act — use `…fmx4`).
 
-**Verified**: `pytest` 6/6 green; uvicorn boots; all routes 200 (incl. unknown-jurisdiction
-and missing-instrument empty-states); instrument three-pane + both tabs render with no Jinja
-errors (synthetic context — the real DB was left empty, no fake law inserted).
-
-## Next — the provisions rebuild (planned, NOT yet built; gate on Bing's review)
-
-The mockup's information architecture is section-level (Title-17 chapter → section reader
-with per-section case treatment). Our schema is instrument+version only — no sub-instrument
-granularity. Rather than hardcode a Title-17 chapter/section pair, the agreed shape is a
-**generic `provisions` table under `instrument`, with `versions` re-pointed to hang off a
-provision**, so text can be diffed and cited at section level across every jurisdiction
-(a UK section, an EU article, a treaty article — all "provisions").
-
-### Corrected nav hierarchy (do NOT collapse tiers)
-
-The mockup was a **2-level thing inside ONE instrument** (chapter → section). We wrap it in
-two tiers above. Keep all four distinct — fusing the jurisdiction rail and the chapter rail
-into "one rail that means different things" makes the nav incoherent.
-
+### Applied schema (migration 001)
 ```
-Jurisdiction rail        ← our tier, above everything
-  └─ Instrument          17 U.S.C., CDPA 1988, InfoSoc …
-       └─ Provision d1    = chapters   ← the mockup's "chapter index"
-            └─ Provision d2 = sections  ← the mockup's section rail
-                 └─ § 203(a)(4) …       addressable; may not be railed
-```
-
-### Agreed rebuild sequence (2026-08-12)
-
-Sequence the rebuild BEFORE ingesting real law: today's text would store as one
-whole-instrument blob, which does not split into sections retroactively — ingest-first buys
-nothing we keep and costs a throwaway whole-document reader + a bad first impression. But do
-not design the table blind either.
-
-1. **Parsing spike (DONE 2026-08-12)** — threw three dissimilar shapes at the future schema:
-   17 U.S.C. (OLRC USLM, releasepoint 119-102), CDPA 1988 (legislation.gov.uk CLML), and
-   InfoSoc 2001/29 (EUR-Lex Formex). Keyless. Script + report + retained artifacts live in
-   `spike/` (gitignored, nothing written to `corpus.db`). Re-run: `python spike/parse_spike.py`.
-2. **Freeze the `provisions` delta** from what the spike finds → **Bing reviews** → the
-   migration lands as its own reviewable step (house rule: risky parses gate on human review).
-3. **Re-ingest once** from the retained artifacts into the frozen schema.
-4. **Build the section-level reader** — section rail (provision d1/d2), per-provision
-   versions/diff, per-provision Cases/History (the tab bar is already in place).
-
-### Spike findings (drive the schema delta — full report in gitignored `spike/out/`)
-
-- **The non-operative axis is QUOTED/AMENDING text, NOT Body-vs-Schedule.** (Correction from
-  Claude design — my first cut wrongly skipped Schedules and would have dropped operative law.)
-  The only elements that must never be addressable as this instrument's law are those
-  reproducing OTHER instruments' words: USLM `quotedContent` (in notes) and CLML
-  `BlockAmendment`/`Quotation`. **UK Schedules are operative** (Sch 1 transitional term, Sch 2
-  performance permitted acts — a transactional lawyer hits them constantly) → keep as
-  `kind='schedule_para'`, a separate numbering class NOT folded into the section sequence.
-  Correct counts after this scoping: **153** US sections; **436** UK Body sections **+ 349
-  Schedule paragraphs**; **15** EU articles. (Sub-call for Bing: pure consequential-amendment/
-  repeal schedules amend other Acts — flag whether those specific ones are operative-here.)
-- **Ordinal must be `(sort_int, sort_suffix)`**, not an integer. Real inserted/suffixed
-  sections: US 104A/106A/116A/121A; UK 3A…31BA/31BB…50BA…296ZA. Key `(int, suffix_upper)`
-  orders `106 < 106A < 107` and `296 < 296ZA`. Verified in the report.
-- **Labels are source-given per node** — USLM `section` "§ 203", CLML `P1` "s. 296ZA",
-  Formex `ARTICLE` "Article 5". Render the stored label; never a jurisdiction switch.
-- **Addressability runs 3–4 deep** — real pinpoints § 104A(d)(2)(A)(i) (US, 4 below) and
-  s. 12(5)(a)(i) (UK, 3 below). Emit every cited level as its own node even if the rail
-  shows two.
-- **Schedules are a SEPARATE provision class** (own paragraph numbering) — model them, don't
-  merge into the section sequence.
-- **Recitals — DONE (2026-08-12):** InfoSoc's 61 recitals are loaded from the ORIGINAL OJ
-  act (EUR-Lex HTML), `kind='recital'`, `role='recital'`, railed as a "Recitals" group above
-  the articles. Crucially they demonstrate the provenance split WITHIN one instrument:
-  recital version rows are `is_authentic=1, is_consolidated=0` (original OJ = authentic) while
-  the article rows are `is_authentic=0, is_consolidated=1` (consolidated). Model recitals as
-  **provisions, `kind='recital'`, `role='recital'`**. CJEU judgments turn on recital language (Recital 31 of
-  InfoSoc is cited constantly), so they need stable addressable ids — exactly a provision
-  node — but the `operative=0` flag keeps them out of anything that counts or diffs enacted
-  law. Consequence, which is a version/provenance decision not a parsing one: the **original
-  OJ act (CONSID-tagged) is the STRUCTURAL source** for recitals; the **consolidated
-  manifestation** (`is_authentic=0`) is the **current-text source**. This is the first real
-  test that `is_authentic` earns its place in the model.
-- **EU connector gotcha:** EUR-Lex `legal-content/…/XML` returns a CELLAR *notice* (metadata),
-  NOT the act. The Formex act body is the `…fmx4` manifestation (we pulled the consolidated
-  one via `publications.europa.eu/resource/celex/…fmx4`). The future EU connector must target
-  the manifestation, not the notice.
-- **Treaty (Berne) = HTML hand-load, no XML.** WIPO Lex `text/283698` server-renders the full
-  Paris-Act text; `src/store/ingest_berne.py` parses `<strong>Article N…</strong>` headings +
-  numbered `(1)(2)` paragraphs. `bis`/`ter` fit the ordinal (`6 < 6bis < 7`); the Appendix's
-  roman articles (I–VI) fall back to document order. Treaty text is authentic (`is_authentic=1`,
-  `is_consolidated=0`). WIPO note: no API — scrape courteously; source_url attributes every row.
-
-### Constraints to hold through the rebuild
-
-- **Label comes from source, never inferred.** The reader renders `provision.label` /
-  `kind` as stored ("Article 5" vs "§ 203") — never a `if jurisdiction=='EU'` switch. That
-  data-drives the one design across jurisdictions.
-- **Subsection addressability is a parser risk, not a schema gap.** The schema nests
-  arbitrarily (`parent_id`) with a stable natural key (`UNIQUE(instrument_id, citation)`).
-  The parser must emit every cited level as its own node (attorneys cite § 203(a)(4)) even
-  when the rail only shows two levels. Storage depth ≠ display depth.
-- **Ordinal must survive suffixes, insertions, and holes.** A naive integer breaks on
-  § 106A (between 106 and 107), § 104A / § 121A, and gaps from repealed sections. The
-  spike's real deliverable is the ordering scheme, not just "it parsed."
-- **Section facts come from the XML, not memory** (no-fake-law): whether § 601 still
-  exists, chapter 6's gaps, § 106A's placement — all discovered from source in the spike.
-- **Recitals = a Bing decision.** Whether EU recitals are provisions or metadata is a
-  genuine fork; the spike surfaces it with both options costed — it does not decide it.
-
-### Still open (put back to Claude design)
-
-Rail display depth. Mockup rails two levels (chapter→section); attorneys cite four
-(§ 203(a)(4)). We store four, rail two, deep-link to the subsection — but whether a long
-section's rail should expand to subsections is unspecified by the mockup.
-
-### Proposed schema delta (draft — for review before migration)
-
-```
-provisions
-  id              INTEGER PK
-  instrument_id   INTEGER NOT NULL REFERENCES instruments(id)
-  parent_id       INTEGER REFERENCES provisions(id)   -- chapter→section→subsection tree
-  sort_int        INTEGER NOT NULL                     -- ordinal part 1: integer of the number
-  sort_suffix     TEXT NOT NULL DEFAULT '' COLLATE BINARY  -- ordinal part 2: 'A','ZA',… PIN the
-                         -- collation — 296Z<296ZA<296ZEA sorts right by ACCIDENT under default
-                         -- lexical order; a locale-aware collation on the column would break it.
-  label           TEXT NOT NULL                        -- source-given: '§ 203','s. 296ZA','Article 5'
-  heading         TEXT                                 -- section/article title (from source)
-  kind            TEXT   -- source-derived structural tag: 'chapter'|'section'|'subsection'|
-                         --   'article'|'paragraph'|'part'|'schedule'|'schedule_para'|'recital'
-  role            TEXT NOT NULL DEFAULT 'enacting'     -- retrieval semantics (replaces a bare
-                         --   operative boolean — too coarse; see delta note):
-                         --   'enacting'  → operative law (counted, diffed)
-                         --   'schedule'  → operative law in a schedule (counted, diffed)
-                         --   'recital'   → interpretive; addressable + SEARCHABLE, never counted/diffed
-                         --   'quoted'    → other instruments' words; never surfaced as this text
-  citation        TEXT   -- stable pinpoint & natural re-ingest key, e.g. '17 U.S.C. § 203(a)(4)'
-  status          TEXT DEFAULT 'in_force'
-  UNIQUE (instrument_id, citation)
-  -- sort within parent = ORDER BY (sort_int, sort_suffix COLLATE BINARY).
-  -- TEST FIXTURE (nastiest series found): US 104/104A/106/106A/107; UK 31B/31BA/31BB,
-  -- 296Z/296ZA/296ZEA — assert ordering holds under the pinned collation.
-  -- NOTE for review: `role` replaces the earlier `operative` boolean because a boolean
-  -- collapses recital (searchable interpretive authority) and quoted-amendment text (never
-  -- surfaced) into one flag. Bing to confirm the enum at sign-off.
-
-versions  (CHANGE: text hangs off a provision, not the whole instrument)
-  + provision_id  INTEGER REFERENCES provisions(id)    -- NULL = whole-instrument version
-  -- content_sha256 stays the per-provision change key → section-level diff & alerts
-
-case_treatment  (NEW — powers the Cases tab; today it is an honest empty-state)
-  id              INTEGER PK
-  provision_id    INTEGER NOT NULL REFERENCES provisions(id)
-  case_instrument INTEGER REFERENCES instruments(id)   -- the deciding case (type='case')
-  treatment       TEXT   -- 'followed' | 'cited' | 'distinguished' | 'criticized'
-  holding         TEXT   -- grounded to a fetched source; NULL if not fetched
-  source_url      TEXT NOT NULL
-  retrieved_at    TEXT NOT NULL
+provisions(id, instrument_id, parent_id, sort_int, sort_suffix COLLATE BINARY, label,
+           heading, kind, role DEFAULT 'enacting', citation, status, UNIQUE(instrument_id,citation))
+versions   + provision_id  (NULL = whole-instrument version); content_sha256 = per-provision change key
+case_treatment(id, provision_id, case_instrument, treatment, holding, source_url, retrieved_at)  -- Cases tab (empty today)
+provisions_fts(citation, heading, body)  -- provision-scoped search
 ```
 
-Design notes carried from this session:
-- Treatment colour is the only semantic colour in the practice panel: followed/cited →
-  ink/label, distinguished/criticized → **rust** (adverse). No badges — mono caps + keyline.
-- `matrix_cells.source_version` should later point at a provision-scoped version so a
-  matrix cell's pinpoint is a real section, not a whole instrument.
-- Deep-linkable URLs per provision (`/instrument/{id}/{citation}`) are a hard requirement
-  for the attorney audience — model as URL state when the reader goes section-level.
+### Source plan (endpoints PROVEN in the spike — keyless)
+| Source | Fetch | Shape | Change feed |
+|---|---|---|---|
+| US 17 U.S.C. | `uscode.house.gov/download/releasepoints/us/pl/<cong>/<pt>/xml_usc17@<cong>-<pt>.zip` | USLM | OLRC release points |
+| UK CDPA 1988 | `legislation.gov.uk/ukpga/1988/48/data.xml` | CLML | Publication Log Atom |
+| EU directives | `publications.europa.eu/resource/celex/<CELEX>.ENG.fmx4` (act) + `eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:<id>` (OJ recitals) | Formex/HTML | CELLAR |
+| Treaties | WIPO Lex `text/<id>` HTML (e.g. Berne = 283698) | HTML | none (manual) |
 
-**This is a data-model change → it lands as an isolated, reviewable migration BEFORE any
-reader/monitor logic depends on it (prime rule: risky seeds gate on human review).** Do not
-build the provisions reader until Bing signs off on this delta.
+Ingests currently read RETAINED artifacts; a real **connector** (`discover`+`fetch`) that
+pulls these live is not yet built — that's the automation step for change-monitoring.
 
-**Migration 001 APPLIED to `corpus.db` (Bing signed off 2026-08-12):**
-`db/migrations/001_provisions_rebuild.sql` — provisions + case_treatment tables,
-`versions.provision_id`, ordinal collation, role CHECK, FTS over provision text.
+## Known refinements (small, non-blocking)
 
-**Ingest DRAFTED (not applied to corpus):** `src/store/ingest_uslm.py` — provision-aware,
-re-runnable 17 U.S.C. ingest. Refuses to write `corpus.db` without `--allow-corpus`; requires
-migration 001. Validated on a scratch DB (schema+migration+seed, then ingest): **3,118
-provisions** (15 chapters … 153 sections … down to subitem), **153 section versions**
-(sha256'd), provision-FTS grounded (`fair use`→§107, `termination`→§203). **Idempotent** —
-a second run inserts 0 new versions. Deep pinpoint `§ 104A(d)(2)(A)(i)` resolves; `§ 106A`
-sorts between `§ 106` and `§ 107`.
+- **CDPA schedule-paragraph pinpoints** — some collide (schedule sub-structure the citation
+  doesn't yet capture); guarded by a deterministic `#n` suffix so nothing is overwritten.
+  Real fix: full schedule-Part pinpointing in the CLML citation.
+- **Rail display depth** — we store 4 levels, rail 2 (chapter→section/article). Whether a
+  long section's rail should expand to subsections is unspecified by the mockup (a design Q).
+- **Treaty/article rail group label** — ungrouped provisions (Berne articles) render under a
+  generic header; could label per instrument type.
 
-**Two schema fixes the USLM ingest CAUGHT (folded into migration 001) — why we draft the
-ingest before freezing:**
-1. `versions` UNIQUE was `(instrument_id, point_in_time, language)` — collides once many
-   provisions of one instrument share a point-in-time. Rebuilt to include `provision_id`.
-2. `kind` CHECK was missing USLM's deep levels (`subclause`/`item`/`subitem`/`subpart`).
-   Extended. (17 U.S.C. nests 4 below the section.)
+## Next steps — roadmap & recommendation
 
-**CDPA ingest DRAFTED:** `src/store/ingest_clml.py` — CLML, second source shape, exercises
-the Body-vs-Schedule role split. Validated on the demo DB: **436 Body sections** (role
-`enacting`) **+ 349 Schedule paragraphs** (role `schedule`), `s. 296 < 296A < 296B < 296ZA`
-ordering, FTS `fair dealing`→ s.29/s.30. Idempotent (re-run: 0 new). What the CLML ingest
-caught: (a) CDPA **Schedule 1 contains `Part` elements** — the Part/Chapter handler had to
-PRESERVE schedule context or schedule paragraphs get misclassified as Body sections and
-collide with real section numbers (corrupted `s. 1`); (b) some schedule-paragraph citations
-still collide (schedule sub-structure the pinpoint doesn't yet capture) — currently guarded
-by a deterministic `#n` suffix; **real fix later = full schedule-part pinpointing in the
-CLML citation.**
+Per CLAUDE.md's phased roadmap; Phase 0 done, now branching into corpus expansion + monitoring.
 
-**InfoSoc ingest DRAFTED + APPLIED:** `src/store/ingest_formex.py` — Formex, the THIRD
-source shape (EUR-Lex CONS.ACT). Ingested into a scratch DB, then `corpus.db`
-(`--allow-corpus`, approved) and `corpus-demo.db` as **instrument #3**. Results:
-**4 chapters** (Formex `DIVISION`, roman→arabic sort) · **15 articles** (role `enacting`,
-operative text versioned at the ARTICLE level) · **31 paragraphs** · **47 points/clauses**
-(`ITEM` under `LIST` under `ALINEA` under `PARAG`). 93 provision versions, all sha256'd.
-Validated: deepest pinpoint **`Directive 2001/29 Art. 5(3)(k)`** resolves to its real text
-("use for the purpose of caricature, parody or pastiche;"); the Art. 5 -> 5(3) -> 5(3)(k)
-chain is intact; provision-FTS grounds (`reproduction`->Art. 2/5, `"communication to the
-public"`->Art. 3). **Idempotent** (re-run: 0 new versions). Depth here is exactly 3
-(article>paragraph>point) — no nested lists in this act.
+**▶ Recommended next: Phase 2 — change monitoring.** This is where the tool earns its keep
+(and where partners start caring per CLAUDE.md), and the schema is already built for it: every
+provision version carries `content_sha256`. Build `src/monitor/`: re-fetch a source → parse →
+diff per-provision sha → write an `alerts` row (old_version→new_version) → render a redline
+in the reader / a digest. Pairs naturally with building the first real **connector**
+(`discover(since)`/`fetch`) so re-fetch is automated rather than manual artifact-swapping.
 
-**Formex-specific findings:**
-1. **`is_authentic` earns its place (first real use).** The consolidated fmx4 manifestation
-   is NOT authentic law -> `_store_version` inserts version rows with **`is_authentic=0`,
-   `is_consolidated=1`, `is_official_language=1`** (English is an official EU language),
-   set EXPLICITLY (the USLM/CLML template inserts leave the authentic=1 defaults). Verified:
-   0 InfoSoc version rows have `is_authentic!=0`. `source_url` = the
-   `publications.europa.eu/resource/celex/02001L0029-20171010.ENG.fmx4` manifestation.
-2. **Recitals DEFERRED, not faked.** Per the agreed provenance split, recitals are
-   `kind='recital'`/`role='recital'` sourced from the ORIGINAL OJ act (CONSID-tagged). This
-   CONSOLIDATED artifact flattens recitals into the PREAMBLE — they are NOT individually
-   CONSID-tagged, so they are not cleanly extractable here. Rather than fabricate numbered
-   recitals (prime rule 1), **recitals are skipped with `recitals=0`**; the ingest's recital
-   path is a small addition (`kind='recital'`) when an original-OJ manifestation is supplied.
-   **Follow-up: fetch the original OJ Formex manifestation and ingest its CONSID recitals.**
-3. Article number is parsed from the trailing digits of `TI.ART` ("Article 5"->"5", survives
-   letter-suffixed insertions); paragraph number from `NO.PARAG`; point marker from
-   `ITEM>NP>NO.P` ("(k)"). Alphabetic point markers fall back to document order for the
-   ordinal, exactly as USLM/CLML do for alpha/roman levels.
-
-**Reader change (shared code):** `src/app.py` `_section_reader` — the rail's leaf-kind
-filter was `kind='section'` only (US/UK sections), so EU articles didn't rail. Generalized
-to `kind IN ('section','article','schedule_para')` (both the count guard and the rows
-query). Guarded/minimal; US `/instrument/1` and UK `/instrument/2` still render (verified
-in-process via Starlette TestClient), empty-DB fallback unaffected. EU articles now rail
-grouped by their 4 chapters. **The running 8021 uvicorn is not `--reload`, so this code edit
-needs a server restart to show on the live process** (DB rows are already live).
-
-## Source plan — how the corpus gets added
-
-Retrieval-first, provisions-aware: a connector `discover(since)`→refs + `fetch(ref)`→official
-text+provenance; the `store/` layer parses each fetch into a provision tree (per the spike's
-rules) and versions the text per provision. **Endpoints below are PROVEN in the spike** — the
-exact URLs that returned real law, keyless, so they don't get re-discovered:
-
-| Source | Fetch (proven keyless) | XML shape | Change feed | Notes |
-|---|---|---|---|---|
-| **US 17 U.S.C.** | `uscode.house.gov/download/releasepoints/us/pl/<cong>/<pt>/xml_usc17@<cong>-<pt>.zip` → `usc17.xml` | USLM | OLRC release points (poll the download page) | skip `note`/`quotedContent`; §§ nest 4 deep |
-| **UK CDPA 1988** | `legislation.gov.uk/ukpga/1988/48/data.xml` | CLML | Publication Log Atom (free) | Body §§ + Schedule paras (separate class); skip `BlockAmendment` |
-| **EU InfoSoc / DSM** | `publications.europa.eu/resource/celex/<CELEX>.ENG.fmx4` (the **fmx4 manifestation**) | Formex | CELLAR | **NOT** `legal-content/…/XML` (that's a metadata notice). Consolidated=`is_authentic=0`; original OJ carries CONSID recitals |
-| **Core treaties** (Berne, TRIPS, WCT…) | hand-loaded WIPO/WTO text | n/a | none (manual) | no API; `is_official_language` per text |
-
-**Onboarding order** = the confirmed Phase-0 slice, one per source-shape so the schema is
-stress-tested by variety, not volume:
-1. **17 U.S.C.** (USLM) — DONE. proves deep nesting + ordinal suffixes.
-2. **CDPA 1988** (CLML) — DONE. proves Body-vs-Schedule role split + inserted-section ordinals.
-3. **InfoSoc 2001/29** (Formex) — **DONE 2026-08-12.** proves articles + `is_authentic=0`
-   (consolidated=not authentic). Recital/manifestation split HALF-exercised: articles from
-   the consolidated act; recitals deferred to the original OJ (CONSID) manifestation — see
-   the Formex findings above.
-4. **Berne Convention** (hand-load) — proves the no-XML, hand-entered path + treaty identity.
-
-Each source lands as its own reviewable ingest run (idempotent on the `citation` natural key,
-so Title 17 can be re-parsed repeatedly). Tier-1 fetch is **all keyless** — the pending API
-keys (GOVINFO/LEGISCAN/CONGRESS_GOV) are only for the Phase-3 bill pipeline, not this slice.
+**Also queued (any order):**
+- **Phase 1 — finish Tier-1 corpus:** 37 C.F.R. (eCFR, keyless), EU **DSM 2019/790** + the
+  other copyright directives (reuse `ingest_formex.py`), and the remaining core treaties
+  (TRIPS/WCT/WPPT/Rome/Beijing/Marrakesh via WIPO — reuse the Berne HTML pattern).
+- **Cases tab → real data:** populate `case_treatment` (per-provision decisions,
+  followed/distinguished/criticized) so the practice panel's second tab lights up. Needs a
+  case source + the treatment-colour vocabulary (rust = adverse) already speced.
+- **Deep-linkable provision URLs** (`/instrument/{id}/{citation}`) — a hard requirement for
+  the attorney audience; today it's `?sec=<id>`.
+- **Comparative matrix (Phase 4 groundwork):** point `matrix_cells.source_version` at a
+  provision-scoped version so a cell's pinpoint is a real section; keep it human-gated.
+- **Own venv + hosting decision** (still borrowing `~/Julie/ai-law-portal/.venv`; local vs Render).
 
 ## Decisions still pending (from CLAUDE.md)
-
-- Hosting (local vs Render).
-- Own venv vs. continue borrowing `~/Julie/ai-law-portal/.venv`.
-- Confirm the Phase-0 first-slice instruments (CDPA 1988 / 17 U.S.C. / DSM+InfoSoc / Berne).
-- Copyright-only vs IP-wide (the handoff's open question — the name says IP, the corpus is
-  copyright). Affects whether the top nav needs a body-of-law row.
+- Hosting (local vs Render); own venv vs. borrowing ai-law-portal's.
+- **Copyright-only vs IP-wide** — the product name says IP, the corpus is copyright. If patent
+  (Title 35) / trademark (Lanham) / trade secret (DTSA) are coming, the top nav needs a
+  body-of-law row above the material-type row. Deliberately unresolved.
+- Recitals-as-provisions: RESOLVED and shipped (kind='recital', role='recital'). Sub-call
+  still open: whether CDPA consequential-amendment/repeal schedules (Sch 7/8) are operative-here.
