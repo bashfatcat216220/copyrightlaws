@@ -16,13 +16,13 @@ Pre-Phase-0 scaffold, now carrying the **KM IP — Statute Browser** design syst
   use this) and `~/Litigation/multi-agent-document-review/.venv` (no web deps).
 - **Git**: remote `origin` = https://github.com/bashfatcat216220/copyrightlaws.git,
   branch `main`. **Nothing pushed yet** (holding on the user's instruction).
-- **DB**: migration 001 **APPLIED to `corpus.db`** (Bing signed off 2026-08-12). Real law
-  loaded via the approved ingests: **17 U.S.C.** (153 sections) + **CDPA 1988** (436 Body
-  sections + 349 schedule paras) + **InfoSoc / Directive 2001/29** (15 articles, 31
-  paragraphs, 47 points, 4 chapters). **3 instruments · 8,370 provisions · 1,031 provision
-  versions.** The live server runs on `corpus.db`; the section reader shows real US + UK +
-  EU law. (NB: the app.py rail change below needs a server RESTART to render on the running
-  8021 process — DB rows are already live; the code edit is verified in-process.)
+- **DB**: migration 001 **APPLIED to `corpus.db`** (Bing signed off 2026-08-12). The Phase-0
+  Tier-1 slice is COMPLETE — all four source shapes loaded via the approved ingests:
+  **17 U.S.C.** (USLM; 153 sections) + **CDPA 1988** (CLML; 436 Body sections + 349 schedule
+  paras) + **InfoSoc / Directive 2001/29** (Formex; 15 articles) + **Berne Convention**
+  (WIPO Lex HTML hand-load; 53 articles incl. bis/ter + roman Appendix, 250 paragraphs).
+  **4 instruments · 8,673 provisions · 1,084 provision versions.** The live server runs on
+  `corpus.db`; the section reader shows real US + UK + EU + INT law.
 
 ## Done this session — UI reskin (ships now)
 
@@ -129,6 +129,11 @@ not design the table blind either.
   NOT the act. The Formex act body is the `…fmx4` manifestation (we pulled the consolidated
   one via `publications.europa.eu/resource/celex/…fmx4`). The future EU connector must target
   the manifestation, not the notice.
+- **Treaty (Berne) = HTML hand-load, no XML.** WIPO Lex `text/283698` server-renders the full
+  Paris-Act text; `src/store/ingest_berne.py` parses `<strong>Article N…</strong>` headings +
+  numbered `(1)(2)` paragraphs. `bis`/`ter` fit the ordinal (`6 < 6bis < 7`); the Appendix's
+  roman articles (I–VI) fall back to document order. Treaty text is authentic (`is_authentic=1`,
+  `is_consolidated=0`). WIPO note: no API — scrape courteously; source_url attributes every row.
 
 ### Constraints to hold through the rebuild
 
