@@ -16,8 +16,11 @@ Pre-Phase-0 scaffold, now carrying the **KM IP — Statute Browser** design syst
   use this) and `~/Litigation/multi-agent-document-review/.venv` (no web deps).
 - **Git**: remote `origin` = https://github.com/bashfatcat216220/copyrightlaws.git,
   branch `main`. **Nothing pushed yet** (holding on the user's instruction).
-- **DB**: 18 jurisdictions seeded; **zero** instruments/versions/amendments/etc. No real
-  law loaded. Every screen shows honest empty-states — no fake law, per prime rule 1.
+- **DB**: migration 001 **APPLIED to `corpus.db`** (Bing signed off 2026-08-12). Real law
+  loaded via the approved ingests: **17 U.S.C.** (153 sections) + **CDPA 1988** (436 Body
+  sections + 349 schedule paras). 2 instruments · 8,273 provisions · 938 section versions.
+  The live server runs on `corpus.db`; the section reader shows real US + UK law.
+  InfoSoc (EU) ingest in progress (delegated agent).
 
 ## Done this session — UI reskin (ships now)
 
@@ -205,9 +208,9 @@ Design notes carried from this session:
 reader/monitor logic depends on it (prime rule: risky seeds gate on human review).** Do not
 build the provisions reader until Bing signs off on this delta.
 
-**Migration DRAFTED (not applied):** `db/migrations/001_provisions_rebuild.sql` — provisions +
-case_treatment tables, `versions.provision_id`, ordinal collation, role CHECK, FTS over
-provision text. Review artifact only; do NOT run against `corpus.db` until sign-off.
+**Migration 001 APPLIED to `corpus.db` (Bing signed off 2026-08-12):**
+`db/migrations/001_provisions_rebuild.sql` — provisions + case_treatment tables,
+`versions.provision_id`, ordinal collation, role CHECK, FTS over provision text.
 
 **Ingest DRAFTED (not applied to corpus):** `src/store/ingest_uslm.py` — provision-aware,
 re-runnable 17 U.S.C. ingest. Refuses to write `corpus.db` without `--allow-corpus`; requires
