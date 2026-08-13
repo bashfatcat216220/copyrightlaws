@@ -2,13 +2,17 @@
 
 > Status comes from THIS file, read fresh. Do not answer "where are we" from memory.
 
-_Last updated: 2026-08-12._
+_Last updated: 2026-08-13._
 
 ## Where we are (one breath)
 
-**Phase 0 is COMPLETE.** The KM IP — Statute Browser design is live over a section-level
-`provisions` model, with real copyright law from all four Tier-1 source shapes ingested,
-searchable, and cited at the provision level. Migration applied to `corpus.db`; branch pushed.
+**Phase 0 done + Phase 2 jurisdiction breadth done** (18 instruments across US/UK/EU/INT +
+all 14 Tier-2 countries; see the corpus table). The KM IP — Statute Browser design is live
+over a section-level `provisions` model — full-width reader with a fixed-height shell,
+internal-scrolling rails, and KM marker-paragraph body formatting. **Tier-1 completions are
+IN PROGRESS** (2026-08-13): 3 parallel agents adding US 37 C.F.R., the remaining EU directives,
+and the core treaties (WCT/WPPT/Rome/Beijing/Marrakesh/TRIPS). See "Remaining work" for the
+full ordered backlog. corpus.db migrated + loaded; branch pushed.
 
 - **Corpus (live in `corpus.db`):** **18 instruments · 12,857 provisions · 4,516 versions**,
   every version SHA-256'd with `source_url` + `retrieved_at`. **Phase 2 breadth: Tier-1 (4) +
@@ -122,61 +126,51 @@ pulls these live is not yet built — that's the automation step for change-moni
 - **Treaty/article rail group label** — ungrouped provisions (Berne articles) render under a
   generic header; could label per instrument type.
 
-## Next steps — roadmap
+## Remaining work — finish in this order
 
-**Sequencing decision (Bing, 2026-08-12): breadth before depth.** Phase 2 = fill the corpus
-with jurisdictions (full text), THEN add the depth layers. The reader already mixes shallow
-and deep instruments (whole-instrument fallback when an instrument has no provisions), so
-breadth can land incrementally.
+**Sequencing (Bing): breadth before depth.** Tier-2 jurisdiction breadth is DONE (14 countries,
+2 agent waves — see the corpus table above). Work this list top-to-bottom:
 
-**▶ Phase 2 — jurisdiction breadth (full text, ~18 jurisdictions). IN PROGRESS.**
-Finish Tier-1, then add the 14 Tier-2 countries with real provision text. No Tier-3 long
-tail / WIPO-Lex metadata index yet (that's a later, shallower pass).
-- **Finish Tier-1:**
-  - **US 37 C.F.R.** (Copyright Office regs, parts 201–212) — eCFR API, keyless. New shape → new ingest.
-  - **EU directives** — DSM 2019/790, Software 2009/24, Database 96/9, Term 2006/116,
-    Rental/Lending 2006/115, Orphan Works 2012/28, Enforcement 2004/48. **Reuse
-    `ingest_formex.py`** — needs a small generalization: the instrument identity (CELEX/title)
-    is currently hardcoded to InfoSoc; parameterize it, then it's fetch-CELEX-and-run.
-  - **Core treaties** — TRIPS (WTO), WCT, WPPT, Rome, Beijing, Marrakesh. Reuse the
-    `ingest_berne.py` WIPO-Lex HTML pattern (TRIPS is WTO-hosted).
-- **Tier-2 countries (the jurisdiction fill):** DE ✅, then FR, ES, IT, NL, CA, AU, JP, CN,
-  KR, IN, BR, MX, SG. **Reality check (from the DE proof):** Tier-2 is HETEROGENEOUS — no
-  single reusable parser. Sources differ (WIPO Lex is PDF-only for DE; the clean text was the
-  national portal gesetze-im-internet.de), structures differ (DE §-Sections in Divisions; FR
-  Articles L111-1…; etc.), and most are UNOFFICIAL translations → `is_official_language=0`
-  (flagged). So each country = its own source hunt + bespoke parser, but the DB-writer +
-  provision model are identical.
-  - **ALL 14 DONE (2 waves of parallel agents):** DE, CA, AU, NL, IN, SG, FR (wave 1) + ES,
-    IT, JP, CN, KR, BR, MX (wave 2). Each `src/store/ingest_<cc>.py` built on `_common` (see
-    the corpus table for source/counts/lang). Official English where published (CA/AU/IN/SG),
-    else translations flagged `is_official_language=0`. All idempotent, grounded, scratch-
-    validated before loading. Each agent wrote only its ingest + artifact (no corpus.db /
-    shared-file / git touch); the orchestrator validated + loaded centrally.
-  - **Sourcing notes worth keeping:** WIPO Lex PDFs sit behind CloudFront presigned URLs (grab
-    the signed link off the details page; bare paths 301/403). MX has no English PDF anymore →
-    used WIPO's text-view HTML. CN's CDN 403s scripted fetch → verbatim text via a reader proxy,
-    cross-checked against Wikisource. NL used the IViR academic translation (WIPO PDF dead).
-  - **Tier-1 completions still open (Phase-2 tail):** EU directives (DSM 2019/790 + others) via
-    the Formex pattern (needs `ingest_formex.py` generalized off the hardcoded InfoSoc identity),
-    core treaties (TRIPS/WCT/WPPT/Rome/Beijing/Marrakesh) via the Berne HTML pattern, US 37 C.F.R.
-    via eCFR. These round out US/EU/INT depth; no NEW jurisdictions.
-  - **`_common.py` extracted (`ef8ecdc`)** — a new country ingest is now just `parse()` + an
-    INSTRUMENT dict + a thin `main()`; agents copy `ingest_de_urhg.py` as the template.
-  - **Sourcing reality (confirmed across wave 1):** heterogeneous — official HTML/XML (CA/AU/
-    SG), official PDF (IN), academic/WIPO PDF translations (NL/FR), national portal (DE). Some
-    ingests read a `pdftotext` .txt via the `--html` flag. Minor per-source parse notes (e.g.
-    IN footnote fragments, FR duplicated headers collapsed) are logged in each ingest's report.
+**1. Tier-1 completions — IN PROGRESS (2026-08-13, 3 parallel agents).** Round out US/EU/INT
+   depth; adds instruments *within* existing jurisdictions, no new ones.
+   - **US 37 C.F.R.** (Copyright Office regs, Parts ~201–212) — eCFR API, keyless →
+     `src/store/ingest_ecfr.py`.
+   - **EU directives** (7) — DSM 2019/790, Software 2009/24, Database 96/9, Term 2006/116,
+     Rental/Lending 2006/115, Orphan Works 2012/28, Enforcement 2004/48 →
+     `src/store/ingest_eu_directive.py` (EUR-Lex act HTML: articles + recitals; is_authentic=1).
+   - **Core treaties** (6) — WCT, WPPT, Rome, Beijing, Marrakesh (WIPO Lex HTML) + TRIPS (WTO) →
+     `src/store/ingest_treaty.py` (generalized `ingest_berne.py` pattern).
+   - Each agent writes only its ingest + artifact (no corpus.db / shared-file / git touch); the
+     orchestrator scratch-validates + loads centrally + commits — same flow as the Tier-2 waves.
 
-**Phase 3+ — the depth layers (deferred until breadth lands):**
-- **Change monitoring** — re-fetch → per-provision `content_sha256` diff → `alerts` → redline/
-  digest (`src/monitor/`), paired with real `discover`/`fetch` connectors so re-fetch is automated.
-- **Cases tab → real data** (`case_treatment`, per-provision treatment; rust = adverse).
-- **Deep-linkable provision URLs** (`/instrument/{id}/{citation}`; today `?sec=<id>`).
-- **Comparative matrix** — point `matrix_cells.source_version` at a provision-scoped version;
-  human-gated.
-- **Tier-3 metadata index** (WIPO Lex, ~190 jurisdictions, link-only, "not maintained").
-- **Own venv + hosting** (still borrowing `~/Julie/ai-law-portal/.venv`; local vs Render).
+**2. Depth layers** (after breadth is complete):
+   a. **Change monitoring** — re-fetch → per-provision `content_sha256` diff → `alerts` row →
+      redline / digest (`src/monitor/`), paired with real `discover`/`fetch` connectors so
+      re-fetch is automated (today ingests read retained artifacts).
+   b. **Cases tab → real data** — populate `case_treatment` (per-provision decisions,
+      followed/distinguished/criticized; rust = adverse). Lights up the reader's 2nd tab.
+   c. **Per-subsection text storage** — replace the reader's display-heuristic paragraph split
+      (`_format_body`, reconstructs (a)/(1) paragraphs from a flat blob) with real
+      per-subsection versions; gives clean, robust pinpoint text.
+   d. **Deep-linkable provision URLs** — `/instrument/{id}/{citation}` (today `?sec=<id>`);
+      a hard requirement for the attorney audience (paste a link to a section into a memo).
+   e. **Comparative matrix** — point `matrix_cells.source_version` at a provision-scoped
+      version so a cell's pinpoint is a real section; human-gated (draft → sign-off → publish).
+
+**3. Tier-3 metadata index** — ~170 more jurisdictions from WIPO Lex, link-only, "not
+   maintained" (instrument identity + source_url, no full text). Completes the world map.
+
+**4. Ops / product decisions** — own venv vs borrowing `~/Julie/ai-law-portal/.venv`; hosting
+   (local vs Render); copyright-only vs IP-wide (patent/trademark/trade-secret would need a
+   body-of-law row in the top nav).
+
+### Reference notes for the ingest fan-out (kept from the Tier-2 waves)
+- **`_common.py`** (`ef8ecdc`): a new ingest = `parse()`→`RecordSet` + an INSTRUMENT dict + a
+  thin `main()` calling `run_ingest`. Copy `ingest_de_urhg.py` (HTML) or `ingest_uslm.py` (XML).
+- **Sourcing gotchas:** WIPO Lex PDFs sit behind CloudFront presigned URLs (grab the signed
+  link off the details page; bare paths 301/403). MX had no EN PDF → WIPO text-view HTML. CN's
+  CDN 403s scripted fetch → verbatim text via a reader proxy, Wikisource-checked. NL used the
+  IViR academic translation. Some ingests read a `pdftotext` .txt via the `--html` flag.
 
 ## Decisions still pending (from CLAUDE.md)
 - Hosting (local vs Render); own venv vs. borrowing ai-law-portal's.

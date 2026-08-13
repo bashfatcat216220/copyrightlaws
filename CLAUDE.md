@@ -63,19 +63,28 @@ sha256, versions, and syncs FTS.
 | Tier 3 (~170) | metadata + link only | WIPO Lex (NO API — scrape carefully, email WIPO on reuse; label "not maintained") | no | — |
 
 ## Phased roadmap
-- **Phase 0** — one vertical slice END-TO-END (fetch → version → store → search page →
-  change monitor). Proves the versioning schema before a second source is touched.
-  (First slice per user: US + UK + EU + core treaties together.)
-- **Phase 1** — the rest of Tier-1 corpus; three source shapes stress-test the schema.
-- **Phase 2** — change monitoring (hash-diff → redline → digest). Where partners start caring.
-- **Phase 3** — pipeline tracker (Congress + LegiScan 50-state + EUR-Lex prep acts + FR NOIs).
-- **Phase 4** — Tier 2 jurisdictions + the comparative matrix.
-- **Phase 5** — Tier 3 metadata index from WIPO Lex, link-only, "not maintained".
+> Reordered in execution (Bing, 2026-08): **breadth before depth** — fill jurisdictions first,
+> then monitoring/cases. Live status + the exact ordered backlog live in `PROJECT_STATE.md`
+> (read it fresh); this is the durable shape.
+- **Phase 0 — DONE.** One vertical slice end-to-end (fetch → provisions → version → reader →
+  search), then the `provisions` migration signed off + applied. Schema proven on 4 source
+  shapes (USLM / CLML / Formex / WIPO HTML).
+- **Breadth — DONE (Tier-2, 14 countries) · Tier-1 completions IN PROGRESS.** 18 instruments
+  loaded (US/UK/EU/INT + DE/CA/AU/NL/IN/SG/FR/ES/IT/JP/CN/KR/BR/MX). Finishing 37 C.F.R. +
+  the rest of the EU directives + the core treaties.
+- **Depth layers — TODO (next):** change monitoring (hash-diff → redline → digest — where
+  partners start caring); real Cases data (`case_treatment`); per-subsection text; deep-
+  linkable provision URLs; the comparative matrix.
+- **Pipeline tracker — TODO:** Congress + LegiScan 50-state + EUR-Lex prep acts + FR NOIs.
+- **Tier-3 — TODO:** metadata index from WIPO Lex, link-only, "not maintained".
 
 ## How to run
-- Init DB:  `python src/db.py`
-- Web:      `uvicorn src.app:app`  -> http://localhost:8000
-- (connectors/monitor/matrix are stubs until Phase 0 — see the module docstrings)
+- Python: `~/Julie/ai-law-portal/.venv/bin/python` (fastapi/uvicorn/jinja2). No `sqlite3` CLI.
+- Init DB:  `python src/db.py`  · apply the provisions migration: run
+  `db/migrations/001_provisions_rebuild.sql` (already applied to `corpus.db`).
+- Web:  `uvicorn src.app:app` (we run `--port 8021`) -> the reader/search over the live corpus.
+- Ingest a source: `python src/store/ingest_<x>.py --db db/corpus.db --allow-corpus --html/--xml <artifact> --source-url <url>`. `store/_common.py` = shared writer; monitor/matrix still stubs.
+- corpus.db + corpus-demo.db + spike/ are gitignored (rebuildable from the ingests).
 
 ## Decisions pending
 - Hosting (local vs Render, mirroring ai-law-portal).
