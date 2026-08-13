@@ -268,7 +268,9 @@ def instrument(request: Request, iid: int, tab: str = "cases",
                view="none")
     if inst and has_prov and sec is not None:              # View 2 — section reader
         rail, sel = _section_reader(conn, iid, sec)
-        ctx.update(view="reader", rail=rail, sel=sel)
+        rail_numw = max((len(s["label"]) for grp in (rail or []) for s in grp["sections"]),
+                        default=6) + 1                     # align the rail number column (site standard)
+        ctx.update(view="reader", rail=rail, sel=sel, rail_numw=rail_numw)
     elif inst and has_prov:                                # View 1 — chapter index
         ctx.update(view="index", ci=_chapter_index(conn, iid, chap))
     elif inst:                                             # whole-instrument fallback (no provisions)

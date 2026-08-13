@@ -80,7 +80,7 @@
 {% elif view == 'reader' %}
 {# ── View 2 — section reader: section rail + reading column + practice panel ── #}
 <div class="reader-wrap">
-  <nav class="secrail">
+  <nav class="secrail" style="--secnumw: {{ rail_numw }}ch;">
     <a class="secrail-back" href="/instrument/{{ inst.id }}">← {{ inst.official_citation or inst.title }}</a>
     {% for grp in rail %}
       <div class="secrail-chap">{{ grp.chap_label or 'Provisions' }}</div>

@@ -185,8 +185,9 @@
     .secrow{display:flex; gap:13px; align-items:baseline; padding:10px 22px 10px 18px;
       border-bottom:1px solid var(--rule-light); border-left:4px solid transparent; color:var(--body-muted);}
     .secrow:hover{background:var(--paper); text-decoration:none;}
-    .secrow .secnum{font-family:var(--mono); font-size:13px; color:var(--navy); flex:none; width:62px;}
-    .secrow .secttl{font-family:var(--sans); font-size:14px; line-height:1.45;}
+    .secrow .secnum{font-family:var(--mono); font-size:13px; color:var(--navy); flex:none;
+      width:var(--secnumw, 62px); white-space:nowrap;}
+    .secrow .secttl{font-family:var(--sans); font-size:14px; line-height:1.45; min-width:0;}
     .secrow.active{background:var(--paper); border-left-color:var(--rust);}
     .secrow.active .secnum{font-weight:500; color:var(--ink);}
     .secrow.active .secttl{font-weight:600; color:var(--ink);}
