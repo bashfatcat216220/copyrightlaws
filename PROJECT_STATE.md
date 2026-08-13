@@ -12,8 +12,10 @@ EU = 8 copyright directives (InfoSoc + DSM/Software/Database/Term/Rental/Orphan/
 INT = 7 treaties (Berne + WCT/WPPT/Rome/Beijing/Marrakesh/TRIPS); + all 14 Tier-2 countries
 (see the corpus table). The KM IP — Statute Browser design is live over the section-level
 `provisions` model — full-width reader, fixed-height shell, internal-scrolling rails, KM
-marker-paragraph body. Next up: the depth layers (see "Remaining work"). corpus.db migrated +
-loaded; branch pushed.
+marker-paragraph body. **Depth layers STARTED: change-monitoring is live** — `/alerts` lists
+90 real UK CDPA amendments (2015→now, incl. the Brexit "EEA State"→"United Kingdom" changes),
+with redlines in the reader. Next depth items: Cases data, per-subsection text, deep-linkable
+URLs, matrix (see "Remaining work"). corpus.db migrated + loaded; branch pushed.
 
 - **Corpus (live in `corpus.db`):** **18 instruments · 12,857 provisions · 4,516 versions**,
   every version SHA-256'd with `source_url` + `retrieved_at`. **Phase 2 breadth: Tier-1 (4) +
@@ -144,10 +146,16 @@ pulls these live is not yet built — that's the automation step for change-moni
      (WTO HTML) → `src/store/ingest_treaty.py` (`--treaty all`). 218 articles. Agreed statements
      kept inline for the HTML treaties, skipped for the WCT/WPPT PDFs (noted, minor asymmetry).
 
-**2. Depth layers** (after breadth is complete):
-   a. **Change monitoring** — re-fetch → per-provision `content_sha256` diff → `alerts` row →
-      redline / digest (`src/monitor/`), paired with real `discover`/`fetch` connectors so
-      re-fetch is automated (today ingests read retained artifacts).
+**2. Depth layers** (breadth is complete; STARTED here):
+   a. **Change monitoring — DONE (engine + UI, 2026-08-13).** `src/monitor/monitor.py` reads
+      the per-provision version history and fires `alerts` rows with a word-level redline
+      (− removed / + added) + change ratio; idempotent per (old_version, new_version). UI:
+      `/alerts` page + nav badge + a rust-keyline redline block in the reader on changed
+      provisions. **Proven on real data:** UK CDPA reloaded 2015-04-06 → current (legislation.
+      gov.uk point-in-time) → 90 amended sections caught, redlines showing the Brexit changes
+      ("an EEA State" → "the United Kingdom"). REMAINING for this item: automated `discover`/
+      `fetch` **connectors** so re-fetch is scheduled (today the monitor runs after a manual
+      re-ingest; `python src/monitor/monitor.py --db <db> [--instrument <id>]`).
    b. **Cases tab → real data** — populate `case_treatment` (per-provision decisions,
       followed/distinguished/criticized; rust = adverse). Lights up the reader's 2nd tab.
    c. **Per-subsection text storage** — replace the reader's display-heuristic paragraph split
