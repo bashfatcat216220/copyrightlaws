@@ -191,10 +191,12 @@
     .secrow.active .secttl{font-weight:600; color:var(--ink);}
 
     /* ── Section reader (instrument) three-pane split ─────────────────── */
-    .reader-wrap{display:flex; align-items:stretch;}
+    /* Bound the 3-pane reader to a page width and centre it, so on wide screens the
+       reading column isn't a 660px measure hugging the left with dead space on the right. */
+    .reader-wrap{display:flex; align-items:stretch; max-width:1400px; margin:0 auto;}
     .reading{flex:1; min-width:420px; padding:28px 46px 48px; background:var(--paper);
       border-right:1px solid var(--rule);}
-    .reading .measure{max-width:660px;}
+    .reading .measure{max-width:720px; margin:0 auto;}
     .reading .rhead{border-bottom:1px solid var(--ink); padding-bottom:16px; margin-bottom:18px;
       display:flex; justify-content:space-between; align-items:flex-start; gap:24px;}
     .reading .rhead .cite{font-family:var(--mono); font-size:13px; letter-spacing:0.04em; color:var(--rust);}
