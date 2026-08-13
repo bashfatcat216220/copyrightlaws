@@ -103,9 +103,21 @@
           <div class="lbl">Status</div>
           {% if sel.status == 'repealed' %}<div class="val" style="color:var(--rust);">Repealed</div>
           {% else %}<div class="val">In force</div>{% endif %}
+          {% if sel.point_in_time %}<div class="eff">EFFECTIVE {{ sel.point_in_time }}</div>{% endif %}
         </div>
       </div>
-      {% if sel.content %}<div class="lawtext">{{ sel.content }}</div>
+
+      <div class="metastrip">
+        {% if sel.nver %}<span>VERSION{{ '' if sel.nver == 1 else 'S' }} · {{ sel.nver }}</span>{% endif %}
+        {% if not sel.is_authentic %}<span class="flag warn" style="margin:0;">Consolidated — not authentic</span>{% endif %}
+        {% if not sel.is_official_language %}<span class="flag warn" style="margin:0;">Unofficial translation</span>{% endif %}
+      </div>
+
+      {% if sel.body %}
+        {% for p in sel.body %}
+          <div class="bodypara"><div class="mark">{{ p.mark }}</div><div class="txt">{{ p.text }}</div></div>
+        {% endfor %}
+      {% elif sel.content %}<div class="lawtext">{{ sel.content }}</div>
       {% else %}<div class="placeholder-banner">Metadata only — read at the official source below.</div>{% endif %}
       {% if sel.source_url %}
         <div class="prov">

@@ -213,6 +213,13 @@
       padding-left:9px; margin:18px 0;}
     .lawtext{font-family:var(--serif); font-size:16.5px; line-height:1.72; color:var(--body);
       white-space:pre-wrap; text-wrap:pretty; margin:18px 0;}
+    /* KM body: a subsection marker column + serif reading text, one row per paragraph */
+    .bodypara{display:flex; gap:16px; margin-bottom:18px;}
+    .bodypara .mark{width:28px; flex:none; font-family:var(--mono); font-size:13px; color:var(--rust);
+      padding-top:4px;}
+    .bodypara .txt{font-family:var(--serif); font-size:16.5px; line-height:1.72; color:var(--body);
+      text-wrap:pretty;}
+    .bodypara:first-of-type{margin-top:20px;}
     .prov{border-top:1px solid var(--rule); margin-top:26px; padding-top:14px;
       font-family:var(--mono); font-size:11px; letter-spacing:0.06em; color:var(--label); line-height:1.9;}
     .prov a{color:var(--navy);}

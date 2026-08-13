@@ -8,6 +8,7 @@ Serif/Franklin/Plex Mono) in a legal-research-terminal layout (rail + citation g
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -140,14 +141,49 @@ def _section_reader(conn, iid, sec):
             rail.append(cur)
         cur["sections"].append(r)
     sel = conn.execute(
-        "SELECT p.id, p.label, p.heading, p.citation, p.status, v.content, v.source_url, v.retrieved_at "
+        "SELECT p.id, p.label, p.heading, p.citation, p.status, v.content, v.source_url, "
+        "  v.retrieved_at, v.point_in_time, v.is_official_language, v.is_authentic "
         "FROM provisions p LEFT JOIN versions v ON v.provision_id=p.id AND v.is_current=1 "
         "WHERE p.id=?", (sel_id,)).fetchone()
-    return rail, (dict(sel) if sel else None)
+    sel = dict(sel) if sel else None
+    if sel:
+        sel["body"] = _format_body(sel.get("content"), sel.get("heading"))
+        sel["nver"] = conn.execute("SELECT COUNT(*) FROM versions WHERE provision_id=?",
+                                   (sel_id,)).fetchone()[0]
+    return rail, sel
 
 
 _LEAF_KINDS = ("section", "article", "schedule_para", "recital")
 _CONTAINER_KINDS = ("part", "subpart", "chapter", "subchapter")
+
+# Reconstruct KM-style body paragraphs from the flattened section text: a subsection marker
+# '(a)'/'(1)'/'(A)' opens a paragraph. Skip markers that are cross-references (a marker
+# immediately followed by a lowercase connective, e.g. '(2) of this subsection'). This is a
+# DISPLAY heuristic over text stored as one blob — the robust fix is per-subsection text.
+_MARK_SPLIT = re.compile(r"(?<=\s)(\((?:[a-z]{1,2}|\d{1,3}|[A-Z]{1,2}|[ivxl]{1,4})\))(?=\s)")
+_XREF = re.compile(r"^(of|or|and|to|through|shall|hereof|thereof|but|nor)\b", re.I)
+
+
+def _format_body(content, heading=None):
+    """Split flat section text into [{mark, text}] paragraphs (KM body structure)."""
+    if not content:
+        return []
+    txt = content.strip()
+    if heading:                                            # drop the leading '§ N. <heading>' (shown in the header)
+        pos = txt.find(heading.strip())
+        if 0 <= pos <= 40:
+            txt = txt[pos + len(heading.strip()):].lstrip(" .—:—")
+    toks = _MARK_SPLIT.split(txt)
+    paras, mark, cur = [], "", [toks[0]]
+    for i in range(1, len(toks), 2):
+        mk, body = toks[i], (toks[i + 1] if i + 1 < len(toks) else "")
+        if _XREF.match(body.strip()):                      # cross-ref, not a new subsection — keep inline
+            cur.append(mk + body)
+            continue
+        paras.append({"mark": mark, "text": " ".join(cur).strip()})
+        mark, cur = mk, [body]
+    paras.append({"mark": mark, "text": " ".join(cur).strip()})
+    return [p for p in paras if p["text"]]
 
 
 def _chapter_index(conn, iid, chap):
