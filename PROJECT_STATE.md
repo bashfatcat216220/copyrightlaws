@@ -12,10 +12,12 @@ EU = 8 copyright directives (InfoSoc + DSM/Software/Database/Term/Rental/Orphan/
 INT = 7 treaties (Berne + WCT/WPPT/Rome/Beijing/Marrakesh/TRIPS); + all 14 Tier-2 countries
 (see the corpus table). The KM IP — Statute Browser design is live over the section-level
 `provisions` model — full-width reader, fixed-height shell, internal-scrolling rails, KM
-marker-paragraph body. **Depth layers STARTED: change-monitoring is live** — `/alerts` lists
-90 real UK CDPA amendments (2015→now, incl. the Brexit "EEA State"→"United Kingdom" changes),
-with redlines in the reader. Next depth items: Cases data, per-subsection text, deep-linkable
-URLs, matrix (see "Remaining work"). corpus.db migrated + loaded; branch pushed.
+marker-paragraph body, a small italic sources note on the home page, and per-list aligned
+section-number columns. **Change-monitoring is live AND auto-refreshing** — `/alerts` lists 90
+real UK CDPA amendments (2015→now, incl. the Brexit "EEA State"→"United Kingdom" changes) with
+reader redlines, and `src/monitor/refresh.py` re-pulls UK+US on a daily cron → re-ingests →
+fires new alerts. Next depth items: Cases data, per-subsection text, deep-linkable URLs, matrix
+(see "Remaining work"). corpus.db migrated + loaded; branch pushed.
 
 - **Corpus (live in `corpus.db`):** **18 instruments · 12,857 provisions · 4,516 versions**,
   every version SHA-256'd with `source_url` + `retrieved_at`. **Phase 2 breadth: Tier-1 (4) +
@@ -153,9 +155,17 @@ pulls these live is not yet built — that's the automation step for change-moni
       `/alerts` page + nav badge + a rust-keyline redline block in the reader on changed
       provisions. **Proven on real data:** UK CDPA reloaded 2015-04-06 → current (legislation.
       gov.uk point-in-time) → 90 amended sections caught, redlines showing the Brexit changes
-      ("an EEA State" → "the United Kingdom"). REMAINING for this item: automated `discover`/
-      `fetch` **connectors** so re-fetch is scheduled (today the monitor runs after a manual
-      re-ingest; `python src/monitor/monitor.py --db <db> [--instrument <id>]`).
+      ("an EEA State" → "the United Kingdom").
+      **Connector / auto-refresh — DONE.** `src/monitor/refresh.py` re-fetches registered stable
+      sources (UK CDPA `data.xml`, US 17 U.S.C. release-point zip) → re-ingests → runs the
+      monitor → logs to `logs/refresh.log`. Scheduled via a **user crontab entry (machine-local,
+      NOT in the repo — reinstall on a new machine):**
+      `0 6 * * * cd <repo> && <venv>/python src/monitor/refresh.py --db db/corpus.db >> logs/refresh.log 2>&1`.
+      To make refresh only version genuinely-changed provisions, `_store_version` is now
+      **idempotent BY CONTENT** (skip if current text unchanged; on change, update the pit slot
+      in place or insert) — applied in `_common` AND the pre-`_common` ingests (`ingest_uslm`,
+      `ingest_clml`). REMAINING: add per-source fetchers for the signed-URL / PDF / national-portal
+      sources (only UK + US are auto-refreshed today; the rest need a fetcher each).
    b. **Cases tab → real data** — populate `case_treatment` (per-provision decisions,
       followed/distinguished/criticized; rust = adverse). Lights up the reader's 2nd tab.
    c. **Per-subsection text storage** — replace the reader's display-heuristic paragraph split
