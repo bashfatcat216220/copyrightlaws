@@ -10,16 +10,24 @@ _Last updated: 2026-08-12._
 `provisions` model, with real copyright law from all four Tier-1 source shapes ingested,
 searchable, and cited at the provision level. Migration applied to `corpus.db`; branch pushed.
 
-- **Corpus (live in `corpus.db`):** 4 instruments · **8,734 provisions** · **1,145 provision
-  versions**, every version SHA-256'd with `source_url` + `retrieved_at`.
-  | Jur | Instrument | Shape | Loaded |
-  |---|---|---|---|
-  | US | 17 U.S.C. | USLM XML | 15 chapters · 153 sections (nests 4 deep) |
-  | UK | CDPA 1988 | CLML XML | 436 Body sections + 349 schedule paragraphs |
-  | EU | Directive 2001/29 (InfoSoc) | Formex XML + OJ HTML | 4 chapters · 15 articles + **61 recitals** |
-  | INT | Berne Convention (Paris 1971) | WIPO Lex HTML | 53 articles (bis/ter + roman Appendix) + 250 paras |
+- **Corpus (live in `corpus.db`):** **11 instruments · 11,396 provisions · 3,306 versions**,
+  every version SHA-256'd with `source_url` + `retrieved_at`. Phase 2 breadth IN PROGRESS.
+  | Jur | Instrument | Source shape | Provisions | Lang |
+  |---|---|---|---|---|
+  | US | 17 U.S.C. | USLM XML | 153 sections (4 deep) | official |
+  | GB | CDPA 1988 | CLML XML | 436 sections + 349 schedule paras | official |
+  | EU | Directive 2001/29 (InfoSoc) | Formex XML + OJ HTML | 15 articles + 61 recitals | official |
+  | INT | Berne Convention | WIPO Lex HTML | 53 articles (bis/ter + Appendix) | official |
+  | DE | UrhG | gesetze-im-internet.de HTML | 252 sections | translation |
+  | CA | Copyright Act (C-42) | Justice Laws XML | 277 sections + 11 parts | official |
+  | AU | Copyright Act 1968 | legislation.gov.au HTML | 670 sections | official |
+  | NL | Auteurswet | IViR PDF (academic EN) | 138 articles | translation |
+  | IN | Copyright Act 1957 | India Code PDF | 105 sections | official |
+  | SG | Copyright Act 2021 | SSO HTML | 541 sections | official |
+  | FR | CPI (Part I, copyright) | WIPO Lex PDF | 183 articles | translation |
 - **Live server:** `uvicorn src.app:app` on `corpus.db`, http://127.0.0.1:8021 — the section
-  reader shows real US/UK/EU/INT law; search is grounded (`fair use`→§107, `parody`→Art.5(3)(k)).
+  reader shows real law across all 11; search is grounded (`fair use`→§107, `fair dealing`→CA
+  s.29 / AU s.40, `parody`→InfoSoc Art.5(3)(k) / CA s.29 / FR L122-5).
 - **Git:** `main` pushed to `origin` (github.com/bashfatcat216220/copyrightlaws.git); latest
   `0b6f06c`. `pytest` 6/6.
 - **Environment:** repo at `~/TIngey/copyright-corpus`; run python via
@@ -132,15 +140,20 @@ tail / WIPO-Lex metadata index yet (that's a later, shallower pass).
   Articles L111-1…; etc.), and most are UNOFFICIAL translations → `is_official_language=0`
   (flagged). So each country = its own source hunt + bespoke parser, but the DB-writer +
   provision model are identical.
-  - **DE DONE (2026-08-12):** `src/store/ingest_de_urhg.py` — 252 sections (20a…20d ordinal),
-    Part/Division/Subdivision→part/chapter/subchapter, `is_official_language=0`. FTS
-    `pastiche`→§51a. Idempotent. Instrument #5, live.
-  - **Remaining 13:** best done as a fan-out (parallel agents, one per country — like the
-    InfoSoc build), each finding the country's cleanest English source and writing its parser.
-  - **Refactor opportunity before the fan-out:** the 5 ingests now share ~identical
-    `_upsert_instrument`/`_upsert_provision`/`_store_version`. Extract a `src/store/_common.py`
-    so each new country ingest is just a `parse()` + an INSTRUMENT dict — makes the fan-out
-    clean and keeps agents from re-deriving the writer.
+  - **DONE (7 of 14):** DE, CA, AU, NL, IN, SG, FR — each `src/store/ingest_<cc>.py` built on
+    `_common` (see the corpus table above for source/counts/lang). Official English where the
+    country publishes it (CA/AU/IN/SG); translations flagged `is_official_language=0` (DE/NL/FR).
+    All idempotent, grounded, validated on scratch before loading. Wave 1 ran as 6 parallel
+    agents; each wrote only its ingest + artifact (no corpus.db / shared-file / git touch), and
+    the orchestrator loaded them centrally.
+  - **REMAINING (7):** ES, IT, JP, CN, KR, BR, MX — wave 2 (same fan-out). Plus Tier-1
+    completions (EU directives via Formex, treaties via Berne pattern, 37 C.F.R. via eCFR).
+  - **`_common.py` extracted (`ef8ecdc`)** — a new country ingest is now just `parse()` + an
+    INSTRUMENT dict + a thin `main()`; agents copy `ingest_de_urhg.py` as the template.
+  - **Sourcing reality (confirmed across wave 1):** heterogeneous — official HTML/XML (CA/AU/
+    SG), official PDF (IN), academic/WIPO PDF translations (NL/FR), national portal (DE). Some
+    ingests read a `pdftotext` .txt via the `--html` flag. Minor per-source parse notes (e.g.
+    IN footnote fragments, FR duplicated headers collapsed) are logged in each ingest's report.
 
 **Phase 3+ — the depth layers (deferred until breadth lands):**
 - **Change monitoring** — re-fetch → per-provision `content_sha256` diff → `alerts` → redline/
