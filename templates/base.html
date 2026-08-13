@@ -94,7 +94,8 @@
     .jcard .jk{font-family:var(--mono); font-size:11px; letter-spacing:0.04em; color:var(--faint);}
 
     /* ── View 1: chapter index (chapter rail + 2-column section grid) ──── */
-    .chaprail{width:392px; flex:none; background:var(--paper-warm); border-right:1px solid var(--ink);}
+    .chaprail{width:392px; flex:none; background:var(--paper-warm); border-right:1px solid var(--ink);
+      overflow-y:auto;}
     .chaprail .rhdr{font-family:var(--mono); font-weight:500; font-size:9px; letter-spacing:0.16em;
       text-transform:uppercase; color:var(--label); padding:16px 22px 12px; border-bottom:1px solid var(--ink);}
     .chaprow{display:flex; gap:14px; padding:11px 22px 11px 19px; border-bottom:1px solid var(--rule-light);
@@ -102,12 +103,12 @@
     .chaprow:hover{background:var(--paper); text-decoration:none;}
     .chaprow .cn{font-family:var(--mono); font-weight:500; font-size:11px; letter-spacing:0.05em;
       color:var(--label); width:52px; flex:none;}
-    .chaprow .ct{font-family:var(--sans); font-size:13.5px; line-height:1.35; color:var(--body-muted);}
-    .chaprow .cm{font-family:var(--mono); font-size:10.5px; color:var(--faint); margin-top:3px;}
+    .chaprow .ct{font-family:var(--sans); font-size:15px; line-height:1.4; color:var(--body-muted);}
+    .chaprow .cm{font-family:var(--mono); font-size:11px; color:var(--faint); margin-top:4px;}
     .chaprow.active{background:var(--paper); border-left-color:var(--rust);}
     .chaprow.active .cn{color:var(--ink);} .chaprow.active .ct{font-weight:600; color:var(--ink);}
 
-    .secgrid-wrap{flex:1; min-width:0; padding:26px 34px 40px;}
+    .secgrid-wrap{flex:1; min-width:0; padding:26px 34px 40px; overflow-y:auto;}
     .secgrid-head{border-bottom:1px solid var(--ink); padding-bottom:14px; margin-bottom:6px;
       display:flex; justify-content:space-between; align-items:flex-end; gap:24px;}
     .secgrid-head .kick{font-family:var(--mono); font-size:11px; letter-spacing:0.12em;
@@ -120,9 +121,9 @@
     .secitem{display:flex; gap:14px; align-items:baseline; padding:9px 22px 9px 8px;
       border-bottom:1px solid var(--rule-light);}
     .secitem:hover{background:var(--paper-warm); text-decoration:none;}
-    .secitem .sn{font-family:var(--mono); font-weight:500; font-size:12.5px; color:var(--navy);
-      width:64px; flex:none;}
-    .secitem .st{font-family:var(--serif); font-size:13.5px; line-height:1.4; color:var(--body);}
+    .secitem .sn{font-family:var(--mono); font-weight:500; font-size:14px; color:var(--navy);
+      width:68px; flex:none;}
+    .secitem .st{font-family:var(--serif); font-size:15px; line-height:1.4; color:var(--body);}
     .page{padding:26px 34px 48px;}
 
     /* ── Reading-column vocabulary ────────────────────────────────────── */
@@ -142,7 +143,8 @@
       border-bottom:1px solid var(--rule-light);}
     .lrow:hover{background:var(--paper-warm);}
     .lrow .cite{font-family:var(--mono); font-weight:500; font-size:12.5px; color:var(--navy);}
-    .lrow .h{font-family:var(--serif); font-size:15px; line-height:1.4; color:var(--body);}
+    .lrow .h{font-family:var(--serif); font-size:19px; line-height:1.35; color:var(--body);}
+    .lrow .cite{font-size:13.5px;}
     .lrow .h a{color:var(--ink);}
     .lrow .m{font-family:var(--sans); font-size:11.5px; color:var(--label); margin-top:3px;}
 
@@ -173,7 +175,8 @@
     td.mono{font-family:var(--mono); font-size:11.5px; color:var(--label);}
 
     /* ── Section rail (provisions: chapter-grouped sections) ──────────── */
-    .secrail{width:340px; flex:none; background:var(--paper-warm2); border-right:1px solid var(--rule);}
+    .secrail{width:340px; flex:none; background:var(--paper-warm2); border-right:1px solid var(--rule);
+      overflow-y:auto;}
     .secrail-back{display:block; font-family:var(--mono); font-size:12px; letter-spacing:0.06em;
       color:var(--navy); padding:16px 22px; border-bottom:1px solid var(--rule);}
     .secrail-back:hover{text-decoration:none; background:var(--paper);}
@@ -189,10 +192,11 @@
     .secrow.active .secttl{font-weight:600; color:var(--ink);}
 
     /* ── Section reader (instrument) three-pane split ─────────────────── */
-    /* Full-width like the KM design — the 3-pane block fills the browser edge-to-edge. */
-    .reader-wrap{display:flex; align-items:stretch;}
+    /* Full-width like the KM design, and a STANDARD page height: the 3-pane block is one
+       viewport tall and each pane scrolls INTERNALLY (the rail keeps its own scroll). */
+    .reader-wrap{display:flex; align-items:stretch; height:calc(100vh - 118px); overflow:hidden;}
     .reading{flex:1; min-width:420px; padding:28px 46px 48px; background:var(--paper);
-      border-right:1px solid var(--rule);}
+      border-right:1px solid var(--rule); overflow-y:auto;}
     .reading .measure{max-width:920px; margin:0 auto;}
     .reading .rhead{border-bottom:1px solid var(--ink); padding-bottom:16px; margin-bottom:18px;
       display:flex; justify-content:space-between; align-items:flex-start; gap:24px;}
@@ -224,7 +228,7 @@
     .prov a{color:var(--navy);}
 
     /* practice panel */
-    .practice{flex:0 1 430px; min-width:230px; background:var(--paper-warm);}
+    .practice{flex:0 1 430px; min-width:230px; background:var(--paper-warm); overflow-y:auto;}
     .tabbar{height:44px; display:flex; align-items:center; gap:20px; padding:0 20px;
       background:var(--paper-warm2); border-bottom:1px solid var(--ink);}
     .tabbar a{font-family:var(--sans); font-size:11px; letter-spacing:0.1em; text-transform:uppercase;
@@ -266,5 +270,20 @@
      the home screen (a jurisdiction index) and in the breadcrumb. Instrument pages provide
      their own left rail (chapter rail → View 1, section rail → View 2). #}
   <main class="main">{% block body %}{% endblock %}</main>
+
+  {# Preserve the left rail's scroll position across section/chapter selection (full-page
+     navigation would otherwise snap it back to the top). Keyed per instrument path. #}
+  <script>
+    (function () {
+      var rail = document.querySelector('.secrail, .chaprail');
+      if (!rail) return;
+      var key = 'rail:' + location.pathname;
+      var saved = sessionStorage.getItem(key);
+      if (saved !== null) rail.scrollTop = parseInt(saved, 10) || 0;
+      rail.addEventListener('scroll', function () {
+        sessionStorage.setItem(key, rail.scrollTop);
+      }, { passive: true });
+    })();
+  </script>
 </body>
 </html>
