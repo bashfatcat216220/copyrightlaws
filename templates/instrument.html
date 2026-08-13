@@ -2,7 +2,10 @@
 {% block title %}{{ inst.title if inst else 'Instrument' }} — Copyright Corpus{% endblock %}
 {% block crumb %}<a href="/">CORPUS</a> ›
   {% if inst %}<a href="/jurisdiction/{{ inst.jurisdiction }}">{{ inst.jurisdiction }}</a> ›
-  {{ inst.official_citation or inst.title }}{% if sel %} › {{ sel.label }}{% endif %}{% else %}—{% endif %}{% endblock %}
+  <a href="/instrument/{{ inst.id }}">{{ inst.official_citation or inst.title }}</a>
+  {% if view == 'reader' and sel %} › {{ sel.label }}
+  {% elif view == 'index' and ci and ci.sel_chap %} › {{ ci.sel_chap.label }}{% endif %}
+  {% else %}—{% endif %}{% endblock %}
 
 {% macro practice_panel(tab, cases, amendments, sec_id) %}
   {% set q = '?sec=' ~ sec_id ~ '&' if sec_id else '?' %}
@@ -14,8 +17,7 @@
     <div class="panelbody">
       {% if tab == 'history' %}
         {% if not amendments %}
-          <p class="empty">No amendment history recorded for this instrument yet. Entries land once
-            an amending instrument is linked with its effect and effective date.</p>
+          <p class="empty">No amendment history recorded for this instrument yet.</p>
         {% else %}
           {% for a in amendments %}
             <div class="histrow">
@@ -28,9 +30,8 @@
           {% endfor %}
         {% endif %}
       {% else %}
-        <p class="empty">No decisions linked. Case treatment (followed / distinguished / criticized,
-          per provision) is a later phase — it attaches to provisions, not to the whole instrument.
-          See the provisions rebuild in PROJECT_STATE.md.</p>
+        <p class="empty">No decisions linked. Case treatment (followed / distinguished /
+          criticized, per provision) is a later phase — it attaches to provisions.</p>
       {% endif %}
     </div>
   </aside>
@@ -40,13 +41,49 @@
 {% if not inst %}
   <div class="page"><p class="empty">No such instrument.</p></div>
 
-{% elif rail %}
-{# ── Provisions loaded: chapter-grouped section rail + section reader ── #}
+{% elif view == 'index' %}
+{# ── View 1 — chapter index: chapter rail + 2-column section grid ── #}
+<div class="reader-wrap">
+  {% if not ci.flat %}
+  <nav class="chaprail">
+    <div class="rhdr">Chapters</div>
+    {% for c in ci.chapters %}
+      <a class="chaprow {{ 'active' if c.id == ci.selected }}" href="/instrument/{{ inst.id }}?chap={{ c.id }}">
+        <span style="flex:1; min-width:0;">
+          <span class="ct">{{ c.label }}{% if c.heading %} · {{ c.heading }}{% endif %}</span>
+          <div class="cm">{{ c.range }} · {{ c.n }} SECTION{{ '' if c.n == 1 else 'S' }}</div>
+        </span>
+      </a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
+  <div class="secgrid-wrap">
+    <div class="secgrid-head">
+      <div>
+        <div class="kick">{{ inst.official_citation or inst.jurisdiction }}{% if ci.sel_chap %} · {{ ci.sel_chap.label }}{% endif %}</div>
+        <h1>{{ (ci.sel_chap.heading if ci.sel_chap else None) or ci.sel_chap.label if ci.sel_chap else inst.title }}</h1>
+      </div>
+      <div class="rt">{{ ci.grid|length }} PROVISION{{ '' if ci.grid|length == 1 else 'S' }}</div>
+    </div>
+    <div class="secgrid">
+      {% for s in ci.grid %}
+        <a class="secitem" href="/instrument/{{ inst.id }}?sec={{ s.id }}">
+          <span class="sn">{{ s.label }}</span><span class="st">{{ s.heading or '' }}</span>
+        </a>
+      {% endfor %}
+    </div>
+    {% if not ci.grid %}<p class="empty" style="padding:16px 8px;">No provisions in this chapter.</p>{% endif %}
+  </div>
+</div>
+
+{% elif view == 'reader' %}
+{# ── View 2 — section reader: section rail + reading column + practice panel ── #}
 <div class="reader-wrap">
   <nav class="secrail">
-    <a class="secrail-back" href="/jurisdiction/{{ inst.jurisdiction }}">← {{ inst.official_citation or inst.title }}</a>
+    <a class="secrail-back" href="/instrument/{{ inst.id }}">← {{ inst.official_citation or inst.title }}</a>
     {% for grp in rail %}
-      <div class="secrail-chap">{{ grp.chap_label or 'Sections' }}</div>
+      <div class="secrail-chap">{{ grp.chap_label or 'Provisions' }}</div>
       {% for s in grp.sections %}
         <a class="secrow {{ 'active' if s.active }}" href="/instrument/{{ inst.id }}?sec={{ s.id }}">
           <span class="secnum">{{ s.label }}</span><span class="secttl">{{ s.heading or '—' }}</span>
@@ -68,13 +105,8 @@
           {% else %}<div class="val">In force</div>{% endif %}
         </div>
       </div>
-
-      {% if sel.content %}
-        <div class="lawtext">{{ sel.content }}</div>
-      {% else %}
-        <div class="placeholder-banner">Metadata only — read the section at the official source below.</div>
-      {% endif %}
-
+      {% if sel.content %}<div class="lawtext">{{ sel.content }}</div>
+      {% else %}<div class="placeholder-banner">Metadata only — read at the official source below.</div>{% endif %}
       {% if sel.source_url %}
         <div class="prov">
           SOURCE&nbsp; <a href="{{ sel.source_url }}" target="_blank" rel="noopener">{{ sel.source_url }}</a><br>
@@ -88,7 +120,7 @@
 </div>
 
 {% else %}
-{# ── No provisions loaded: whole-instrument reader (today's default) ── #}
+{# ── whole-instrument fallback (instrument has no provisions loaded) ── #}
 <div class="reader-wrap">
   <section class="reading">
     <div class="measure">
@@ -97,40 +129,17 @@
           {% if inst.official_citation %}<div class="cite">{{ inst.official_citation }}</div>{% endif %}
           <h1>{{ inst.title }}</h1>
         </div>
-        <div class="status">
-          <div class="lbl">Status</div>
-          {% if inst.status == 'in_force' %}<div class="val">In force</div>
-          {% elif inst.status == 'repealed' %}<div class="val" style="color:var(--rust);">Repealed</div>
-          {% else %}<div class="val">{{ inst.status|replace('_',' ')|title }}</div>{% endif %}
-          {% if ver and ver.point_in_time %}<div class="eff">EFFECTIVE {{ ver.point_in_time }}</div>{% endif %}
-        </div>
+        <div class="status"><div class="lbl">Status</div>
+          <div class="val">{{ inst.status|replace('_',' ')|title }}</div></div>
       </div>
-
-      {% if ver %}
-        <div class="metastrip">
-          <span>{{ versions|length }} VERSION{{ '' if versions|length == 1 else 'S' }} ON FILE</span>
-          {% if not ver.is_authentic %}<span class="flag warn" style="margin:0;">Consolidated — not authentic</span>{% endif %}
-          {% if not ver.is_official_language %}<span class="flag warn" style="margin:0;">Unofficial translation</span>{% endif %}
-          {% if ver.has_unapplied_effects %}<span class="flag warn" style="margin:0;">May carry unapplied effects</span>{% endif %}
-        </div>
-
-        {% if ver.content %}
-          <div class="lawtext">{{ ver.content }}</div>
-        {% else %}
-          <div class="placeholder-banner">Metadata only — full text not stored. Read the statute at the official source below.</div>
-        {% endif %}
-
-        {# The two fields that matter most: source_url + retrieved_at, on every screen. #}
-        <div class="prov">
-          SOURCE&nbsp; <a href="{{ ver.source_url }}" target="_blank" rel="noopener">{{ ver.source_url }}</a><br>
-          RETRIEVED&nbsp; {{ ver.retrieved_at }}
-        </div>
-      {% else %}
-        <div class="placeholder-banner">No stored version yet for this instrument.</div>
-      {% endif %}
+      {% if ver and ver.content %}<div class="lawtext">{{ ver.content }}</div>
+      {% elif ver %}<div class="placeholder-banner">Metadata only — read at the official source below.</div>
+      {% else %}<div class="placeholder-banner">No stored version yet for this instrument.</div>{% endif %}
+      {% if ver %}<div class="prov">
+        SOURCE&nbsp; <a href="{{ ver.source_url }}" target="_blank" rel="noopener">{{ ver.source_url }}</a><br>
+        RETRIEVED&nbsp; {{ ver.retrieved_at }}</div>{% endif %}
     </div>
   </section>
-
   {{ practice_panel(tab, cases, amendments, none) }}
 </div>
 {% endif %}

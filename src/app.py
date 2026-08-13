@@ -146,37 +146,79 @@ def _section_reader(conn, iid, sec):
     return rail, (dict(sel) if sel else None)
 
 
+_LEAF_KINDS = ("section", "article", "schedule_para", "recital")
+_CONTAINER_KINDS = ("part", "subpart", "chapter", "subchapter")
+
+
+def _chapter_index(conn, iid, chap):
+    """KM 'View 1' — chapter rail + section grid. Groups an instrument's leaf provisions
+    under their TOP-LEVEL container ('chapter'); returns the selected chapter's grid. For a
+    flat instrument (no containers — e.g. a treaty) there is no chapter rail: the grid is all
+    leaves. `chap` selects a chapter (defaults to the first)."""
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id, parent_id, kind, label, heading, sort_int, sort_suffix, citation "
+        "FROM provisions WHERE instrument_id=?", (iid,))]
+    if not rows:
+        return None
+    by_id = {r["id"]: r for r in rows}
+    key = lambda r: (r["sort_int"], r["sort_suffix"])
+
+    def top(r):
+        while r["parent_id"] is not None and r["parent_id"] in by_id:
+            r = by_id[r["parent_id"]]
+        return r
+
+    leaves = [r for r in rows if r["kind"] in _LEAF_KINDS]
+    tops = [r for r in rows if r["parent_id"] is None and r["kind"] in _CONTAINER_KINDS]
+    if not tops:                                            # flat instrument — no chapter rail
+        return {"flat": True, "chapters": [], "selected": None, "sel_chap": None,
+                "grid": sorted(leaves, key=key)}
+    groups: dict = {}
+    for lf in leaves:
+        groups.setdefault(top(lf)["id"], []).append(lf)
+    chapters = []
+    for tc in sorted(tops, key=key):
+        secs = sorted(groups.get(tc["id"], []), key=key)
+        chapters.append({"id": tc["id"], "label": tc["label"], "heading": tc["heading"],
+                         "n": len(secs),
+                         "range": f"{secs[0]['label']}–{secs[-1]['label']}" if secs else ""})
+    sel = chap if (chap in groups) else (chapters[0]["id"] if chapters else None)
+    return {"flat": False, "chapters": chapters, "selected": sel, "sel_chap": by_id.get(sel),
+            "grid": sorted(groups.get(sel, []), key=key)}
+
+
 @app.get("/instrument/{iid}", response_class=HTMLResponse)
-def instrument(request: Request, iid: int, tab: str = "cases", sec: int | None = None):
+def instrument(request: Request, iid: int, tab: str = "cases",
+               sec: int | None = None, chap: int | None = None):
     conn = _conn()
     inst = conn.execute("SELECT * FROM instruments WHERE id=?", (iid,)).fetchone()
-    ver = conn.execute("SELECT * FROM versions WHERE instrument_id=? AND is_current=1 "
-                       "AND provision_id IS NULL ORDER BY point_in_time DESC LIMIT 1"
-                       if _has_provisions(conn) else
-                       "SELECT * FROM versions WHERE instrument_id=? AND is_current=1 "
-                       "ORDER BY point_in_time DESC LIMIT 1", (iid,)).fetchone()
-    versions = [dict(r) for r in conn.execute(
-        "SELECT id, point_in_time, retrieved_at, is_authentic, is_official_language "
-        "FROM versions WHERE instrument_id=? AND provision_id IS NULL "
-        "ORDER BY point_in_time DESC" if _has_provisions(conn) else
-        "SELECT id, point_in_time, retrieved_at, is_authentic, is_official_language "
-        "FROM versions WHERE instrument_id=? ORDER BY point_in_time DESC", (iid,))]
-    # Provision-aware section reader (only when provisions are loaded for this instrument).
-    rail, sel = (_section_reader(conn, iid, sec) if inst and _has_provisions(conn) else (None, None))
-    # History tab: amendments TO this instrument, with the amending instrument's cite/title.
+    has_prov = bool(inst) and _has_provisions(conn) and conn.execute(
+        "SELECT 1 FROM provisions WHERE instrument_id=? LIMIT 1", (iid,)).fetchone() is not None
+    # History tab: amendments TO this instrument.
     amendments = [dict(r) for r in conn.execute(
         "SELECT a.effective_date, a.effect, a.sections_affected, "
         "  ai.official_citation AS amending_citation, ai.title AS amending_title "
         "FROM amendments a LEFT JOIN instruments ai ON ai.id=a.amending_instrument "
-        "WHERE a.amended_instrument=? ORDER BY a.effective_date DESC", (iid,))]
-    cases: list = []  # case-treatment arrives with the provisions rebuild — empty by design
+        "WHERE a.amended_instrument=? ORDER BY a.effective_date DESC", (iid,))] if inst else []
+    cases: list = []
     tab = "history" if tab == "history" else "cases"
-    active = inst["jurisdiction"] if inst else None
+
+    ctx = dict(inst=dict(inst) if inst else None, amendments=amendments, cases=cases, tab=tab,
+               view="none")
+    if inst and has_prov and sec is not None:              # View 2 — section reader
+        rail, sel = _section_reader(conn, iid, sec)
+        ctx.update(view="reader", rail=rail, sel=sel)
+    elif inst and has_prov:                                # View 1 — chapter index
+        ctx.update(view="index", ci=_chapter_index(conn, iid, chap))
+    elif inst:                                             # whole-instrument fallback (no provisions)
+        ver = conn.execute("SELECT * FROM versions WHERE instrument_id=? AND is_current=1 "
+                           "ORDER BY point_in_time DESC LIMIT 1", (iid,)).fetchone()
+        versions = [dict(r) for r in conn.execute(
+            "SELECT id, point_in_time, retrieved_at, is_authentic, is_official_language "
+            "FROM versions WHERE instrument_id=? ORDER BY point_in_time DESC", (iid,))]
+        ctx.update(view="whole", ver=dict(ver) if ver else None, versions=versions)
     return templates.TemplateResponse(request, "instrument.html",
-                                      _ctx(conn, active_jur=active, inst=dict(inst) if inst else None,
-                                           ver=dict(ver) if ver else None, versions=versions,
-                                           amendments=amendments, cases=cases, tab=tab,
-                                           rail=rail, sel=sel))
+                                      _ctx(conn, active_jur=inst["jurisdiction"] if inst else None, **ctx))
 
 
 @app.get("/matrix", response_class=HTMLResponse)

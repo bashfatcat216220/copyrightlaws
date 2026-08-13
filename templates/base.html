@@ -79,7 +79,51 @@
     .rrow.active .code{font-weight:500; color:var(--ink);}
     .rrow.active .nm{font-weight:600; color:var(--ink);}
 
-    main.main{flex:1; min-width:0;}
+    main.main{min-width:0; min-height:calc(100vh - 118px);}
+
+    /* ── Home: jurisdiction index (replaces the persistent rail) ──────── */
+    .jgroup{font-family:var(--mono); font-weight:500; font-size:9px; letter-spacing:0.15em;
+      text-transform:uppercase; color:var(--label); margin:22px 0 10px; padding-bottom:6px;
+      border-bottom:1px solid var(--ink);}
+    .jgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:0;}
+    .jcard{display:flex; align-items:baseline; gap:12px; padding:12px 14px; border-bottom:1px solid var(--rule-light);
+      border-left:3px solid transparent;}
+    .jcard:hover{background:var(--paper-warm); border-left-color:var(--rust); text-decoration:none;}
+    .jcard .jc{font-family:var(--mono); font-size:12px; color:var(--navy); width:34px; flex:none;}
+    .jcard .jn{font-family:var(--sans); font-size:13.5px; color:var(--ink); flex:1;}
+    .jcard .jk{font-family:var(--mono); font-size:10.5px; color:var(--faint);}
+
+    /* ── View 1: chapter index (chapter rail + 2-column section grid) ──── */
+    .chaprail{width:392px; flex:none; background:var(--paper-warm); border-right:1px solid var(--ink);
+      max-height:calc(100vh - 118px); overflow-y:auto;}
+    .chaprail .rhdr{font-family:var(--mono); font-weight:500; font-size:9px; letter-spacing:0.16em;
+      text-transform:uppercase; color:var(--label); padding:16px 22px 12px; border-bottom:1px solid var(--ink);}
+    .chaprow{display:flex; gap:14px; padding:11px 22px 11px 19px; border-bottom:1px solid var(--rule-light);
+      border-left:3px solid transparent; color:var(--body-muted);}
+    .chaprow:hover{background:var(--paper); text-decoration:none;}
+    .chaprow .cn{font-family:var(--mono); font-weight:500; font-size:11px; letter-spacing:0.05em;
+      color:var(--label); width:52px; flex:none;}
+    .chaprow .ct{font-family:var(--sans); font-size:13.5px; line-height:1.35; color:var(--body-muted);}
+    .chaprow .cm{font-family:var(--mono); font-size:10.5px; color:var(--faint); margin-top:3px;}
+    .chaprow.active{background:var(--paper); border-left-color:var(--rust);}
+    .chaprow.active .cn{color:var(--ink);} .chaprow.active .ct{font-weight:600; color:var(--ink);}
+
+    .secgrid-wrap{flex:1; min-width:0; padding:26px 34px 40px;}
+    .secgrid-head{border-bottom:1px solid var(--ink); padding-bottom:14px; margin-bottom:6px;
+      display:flex; justify-content:space-between; align-items:flex-end; gap:24px;}
+    .secgrid-head .kick{font-family:var(--mono); font-size:11px; letter-spacing:0.12em;
+      text-transform:uppercase; color:var(--rust);}
+    .secgrid-head h1{font-family:var(--serif); font-weight:600; font-size:28px; line-height:1.15;
+      letter-spacing:-0.015em; margin:6px 0 0; color:var(--ink);}
+    .secgrid-head .rt{font-family:var(--mono); font-size:10.5px; line-height:1.6; color:var(--label);
+      text-align:right; white-space:nowrap;}
+    .secgrid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr));}
+    .secitem{display:flex; gap:14px; align-items:baseline; padding:9px 22px 9px 8px;
+      border-bottom:1px solid var(--rule-light);}
+    .secitem:hover{background:var(--paper-warm); text-decoration:none;}
+    .secitem .sn{font-family:var(--mono); font-weight:500; font-size:12.5px; color:var(--navy);
+      width:64px; flex:none;}
+    .secitem .st{font-family:var(--serif); font-size:13.5px; line-height:1.4; color:var(--body);}
     .page{padding:26px 34px 48px;}
 
     /* ── Reading-column vocabulary ────────────────────────────────────── */
@@ -212,18 +256,9 @@
   <div class="caveat">Internal research aid. Not verified for currency. Confirm against the official
     source before relying on it in client work.</div>
 
-  <div class="shell">
-    <aside class="rail">
-      {% for tier, rows in (jurs or {}).items() %}
-        <div class="rgroup {{ 'first' if loop.first }}">Tier {{ tier }}</div>
-        {% for j in rows %}
-          <a class="rrow {{ 'active' if active_jur == j.code }}" href="/jurisdiction/{{ j.code }}">
-            <span class="code">{{ j.code }}</span><span class="nm">{{ j.name }}</span><span class="n">{{ j.n }}</span>
-          </a>
-        {% endfor %}
-      {% endfor %}
-    </aside>
-    <main class="main">{% block body %}{% endblock %}</main>
-  </div>
+  {# No persistent jurisdiction rail — the KM design is per-instrument. Jurisdiction lives on
+     the home screen (a jurisdiction index) and in the breadcrumb. Instrument pages provide
+     their own left rail (chapter rail → View 1, section rail → View 2). #}
+  <main class="main">{% block body %}{% endblock %}</main>
 </body>
 </html>

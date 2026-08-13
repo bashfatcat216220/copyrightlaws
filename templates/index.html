@@ -1,33 +1,35 @@
 {% extends "base.html" %}
-{% block crumb %}<a href="/">CORPUS</a> › BROWSE{% endblock %}
+{% block crumb %}<a href="/">CORPUS</a>{% endblock %}
 {% block body %}
 <div class="page">
   <div class="kicker">Reference · Change monitor</div>
   <h1 class="title">Copyright law, consolidated and sourced</h1>
-  <p class="lead">{{ stats.instruments }} instruments · {{ stats.versions }} versions ·
-    {{ stats.jurisdictions }} jurisdictions on file. A finding aid, never a citation — every
-    version carries its source URL and retrieval date.</p>
+  <p class="lead">{{ counts.instruments }} instruments · {{ counts.versions }} versions ·
+    {{ counts.jurisdictions }} jurisdictions. A finding aid, never a citation — every version
+    carries its official source URL and retrieval date.</p>
 
   <form class="searchbar" action="/search" method="get">
-    <input type="search" name="q" placeholder="term of protection · TDM exception · § 203">
+    <input type="search" name="q" placeholder="term of protection · fair dealing · § 203 · moral rights">
     <button type="submit">Search</button>
   </form>
 
-  {% if not recent %}
-    <p class="empty">No statute text loaded yet — the jurisdiction rail shows the scope; the
-      counts fill in once the connectors run (UK CDPA · US 17 U.S.C. / 37 C.F.R. ·
-      EU directives · core treaties).</p>
-  {% else %}
-    <div class="headrule"><div class="kicker">Recently updated</div></div>
-    {% for c in recent %}
-      <div class="lrow">
-        <div class="cite">{{ c.official_citation or c.jurisdiction }}</div>
-        <div>
-          <div class="h"><a href="/instrument/{{ c.id }}">{{ c.title }}</a></div>
-          <div class="m">{{ c.jurisdiction }}</div>
-        </div>
-      </div>
-    {% endfor %}
-  {% endif %}
+  {# Jurisdiction index (the persistent rail moved here). Only jurisdictions that have
+     instruments are shown as active; the rest render as scope, dimmed. #}
+  {% for tier, rows in (jurs or {}).items() %}
+    <div class="jgroup">Tier {{ tier }}{% if tier == 1 %} · full text, versioned{% elif tier == 2 %} · full text{% else %} · scope{% endif %}</div>
+    <div class="jgrid">
+      {% for j in rows %}
+        {% if j.n %}
+          <a class="jcard" href="/jurisdiction/{{ j.code }}">
+            <span class="jc">{{ j.code }}</span><span class="jn">{{ j.name }}</span><span class="jk">{{ j.n }} INSTRUMENT{{ '' if j.n == 1 else 'S' }}</span>
+          </a>
+        {% else %}
+          <div class="jcard" style="opacity:.45;">
+            <span class="jc">{{ j.code }}</span><span class="jn">{{ j.name }}</span><span class="jk">—</span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% endfor %}
 </div>
 {% endblock %}
