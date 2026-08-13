@@ -1,0 +1,294 @@
+"""Generalized hand-loaded ingest for the core copyright TREATIES — the no-XML source shape.
+
+Generalizes `ingest_berne.py` (which stays untouched) to the rest of the Tier-1 treaty
+group: WCT, WPPT, Rome, Beijing, Marrakesh (WIPO Lex) + TRIPS (WTO). Each is `type='treaty'`,
+`jurisdiction='INT'`, authentic official-English text → is_authentic=1, is_consolidated=0,
+is_official_language=1. NO fake law: every article's text comes from a fetched, retained
+artifact under spike/artifacts/; nothing is typed from memory. Idempotent + corpus.db guard
+come from `_common.run_ingest` (keyed on the stable per-article citation).
+
+Three real-world source shapes were needed — the treaty group is heterogeneous even within
+WIPO Lex, so `parse()` dispatches on a per-instrument `mode`:
+
+  * "wipo_html"  — server-rendered WIPO Lex HTML. Article heading is a centred
+                   `<strong>`/`<b>` block: `<a name="…"></a>Article N<br>Heading`.
+                   Used by Rome, Beijing, Marrakesh (same family as Berne). Agreed
+                   Statements, where WIPO interleaves them inline after an article, are
+                   RETAINED as part of that article's body (adopted interpretive text).
+  * "wipo_pdf"   — WCT/WPPT ship as a CloudFront-presigned PDF inside the page's <iframe>;
+                   we pdftotext -layout it. Heading is a centred (indented) line `Article N`
+                   then a heading line, then the body. The trailing "Note: The agreed
+                   statements…" block is the boundary — articles stop there; the Agreed
+                   Statements are SKIPPED for these two (noted in the report).
+  * "wto_html"   — WTO-hosted TRIPS. Heading is `<a name="artN"></a> … <h2>Article N</h2>`
+                   with the marginal note in a following `<p class="center">`.
+
+Retained artifacts (provenance URL = the WIPO Lex / WTO page):
+  spike/artifacts/wct_wipolex.txt   (PDF→text; page = text/295157)
+  spike/artifacts/wppt_wipolex.txt  (PDF→text; page = text/295477)
+  spike/artifacts/rome_wipolex.html (page = text/289757)
+  spike/artifacts/beijing_wipolex.html   (page = text/295837)
+  spike/artifacts/marrakesh_wipolex.html (page = text/301016)
+  spike/artifacts/trips_wto.html    (wto.org/english/docs_e/legal_e/trips_e.htm)
+
+Run one treaty:
+    python src/store/ingest_treaty.py --treaty wct --db db/corpus.db --allow-corpus
+Run all:
+    python src/store/ingest_treaty.py --treaty all --db db/corpus.db --allow-corpus
+Validate on a scratch DB (no --allow-corpus needed):
+    python src/store/ingest_treaty.py --treaty wct --db /tmp/treaty.db
+"""
+from __future__ import annotations
+
+import argparse
+import html as htmlmod
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import RecordSet, ordinal, run_ingest  # noqa: E402
+
+_ART = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                    "spike", "artifacts")
+
+
+# ── per-treaty config ───────────────────────────────────────────────────────
+# cite_prefix drives the pinpoint citation ("WCT Art. 8", "TRIPS Art. 9").
+TREATIES: dict[str, dict] = {
+    "wct": dict(
+        slug="wct-1996", mode="wipo_pdf", cite_prefix="WCT",
+        artifact="wct_wipolex.txt",
+        source_url="https://www.wipo.int/wipolex/en/text/295157",
+        official_citation="WIPO Copyright Treaty (WCT)",
+        title="WIPO Copyright Treaty (WCT) (Geneva, 1996)",
+        version_label="WIPO Lex (WCT, 1996)"),
+    "wppt": dict(
+        slug="wppt-1996", mode="wipo_pdf", cite_prefix="WPPT",
+        artifact="wppt_wipolex.txt",
+        source_url="https://www.wipo.int/wipolex/en/text/295477",
+        official_citation="WIPO Performances and Phonograms Treaty (WPPT)",
+        title="WIPO Performances and Phonograms Treaty (WPPT) (Geneva, 1996)",
+        version_label="WIPO Lex (WPPT, 1996)"),
+    "rome": dict(
+        slug="rome-1961", mode="wipo_html", cite_prefix="Rome Convention",
+        artifact="rome_wipolex.html",
+        source_url="https://www.wipo.int/wipolex/en/text/289757",
+        official_citation="Rome Convention (1961)",
+        title="International Convention for the Protection of Performers, Producers of "
+              "Phonograms and Broadcasting Organisations (Rome, 1961)",
+        version_label="WIPO Lex (Rome Convention, 1961)"),
+    "beijing": dict(
+        slug="beijing-2012", mode="wipo_html", cite_prefix="Beijing Treaty",
+        artifact="beijing_wipolex.html",
+        source_url="https://www.wipo.int/wipolex/en/text/295837",
+        official_citation="Beijing Treaty on Audiovisual Performances (2012)",
+        title="Beijing Treaty on Audiovisual Performances (2012)",
+        version_label="WIPO Lex (Beijing Treaty, 2012)"),
+    "marrakesh": dict(
+        slug="marrakesh-2013", mode="wipo_html", cite_prefix="Marrakesh Treaty",
+        artifact="marrakesh_wipolex.html",
+        source_url="https://www.wipo.int/wipolex/en/text/301016",
+        official_citation="Marrakesh Treaty (2013)",
+        title="Marrakesh Treaty to Facilitate Access to Published Works for Persons Who "
+              "Are Blind, Visually Impaired or Otherwise Print Disabled (2013)",
+        version_label="WIPO Lex (Marrakesh Treaty, 2013)"),
+    "trips": dict(
+        slug="trips-1994", mode="wto_html", cite_prefix="TRIPS",
+        artifact="trips_wto.html",
+        source_url="https://www.wto.org/english/docs_e/legal_e/trips_e.htm",
+        official_citation="TRIPS Agreement (1994)",
+        title="Agreement on Trade-Related Aspects of Intellectual Property Rights "
+              "(TRIPS) (Marrakesh, 1994, as amended 2005)",
+        version_label="WTO legal texts (TRIPS)"),
+}
+
+
+def _clean(frag: str) -> str:
+    """HTML fragment → plain text: drop empty anchors + footnote superscripts, strip tags."""
+    frag = re.sub(r"<a\s+[^>]*name[^>]*>\s*</a>", "", frag)
+    frag = re.sub(r"<sup>.*?</sup>", "", frag, flags=re.S)       # WIPO footnote refs
+    frag = re.sub(r"<[^>]+>", " ", frag)
+    return re.sub(r"\s+", " ", htmlmod.unescape(frag)).strip()
+
+
+# ── shared: add an article + its addressable numbered paragraphs ─────────────
+def _add_article(rs: RecordSet, cite_prefix: str, i: int, token: str, heading: str | None,
+                 body: str) -> None:
+    """token = article number incl. any bis/ter suffix (e.g. '6', '6bis'). Article carries
+    the text; numbered paragraphs `(1)(2)` OR `1. 2.` become addressable shareless children."""
+    si, su = ordinal(token, i)
+    cite = f"{cite_prefix} Art. {token}"
+    aid = rs.add(kind="article", label=f"Article {token}", heading=heading or None,
+                 sort_int=si, sort_suffix=su, role="enacting", citation=cite,
+                 content=body or None)
+    # child paragraphs: "(1) …" (WIPO) or "1. …" (WTO). Addressable only; article holds text.
+    for pm in re.finditer(r"(?:^|\s)(?:\((\d+)\)|(\d+)\.\s)", body or ""):
+        n = pm.group(1) or pm.group(2)
+        pcite = f"{cite}({n})"
+        if pcite in {r["citation"] for r in rs.records}:
+            continue
+        rs.add(parent_local=aid, kind="paragraph", label=f"({n})", sort_int=int(n),
+               role="enacting", citation=pcite, content=None)
+
+
+# ── mode: WIPO server-rendered HTML (Rome / Beijing / Marrakesh) ─────────────
+# Heading anchor: <strong>|<b> [<a name=…></a>] Article[ ]N[bis/ter/quater] …
+# The number is the reliable marker; the marginal note may sit after a <br> INSIDE the same
+# bold run (Rome/Marrakesh) OR in a SECOND bold run after </strong> (Beijing Art 5). So we
+# match only up to the number, then read the note + body from what follows.
+_HTML_HEAD = re.compile(
+    r"<(strong|b)>\s*(?:<a\s+[^>]*name[^>]*>\s*</a>\s*)?"
+    r"Article\s*(\d+|[IVXLC]+)\s*(?:<em>\s*(bis|ter|quater)\s*</em>|(bis|ter|quater))?",
+    re.S | re.I)
+# note candidate right after the number: either "<br>Heading</strong>" (same run) or a
+# following "<strong>Heading</strong>" run before the first body <p>.
+_HTML_NOTE = re.compile(
+    r"\A\s*(?:<br\s*/?>\s*(.*?)</(?:strong|b)>|</(?:strong|b)>\s*<br\s*/?>\s*"
+    r"<(?:strong|b)>(.*?)</(?:strong|b)>)", re.S | re.I)
+
+
+def _parse_wipo_html(path: str, cite_prefix: str) -> RecordSet:
+    html = open(path, encoding="utf-8", errors="replace").read()
+    heads = list(_HTML_HEAD.finditer(html))
+    rs = RecordSet()
+    for i, m in enumerate(heads):
+        raw_num = m.group(2)
+        suffix = (m.group(3) or m.group(4) or "")
+        token = f"{raw_num}{suffix}"
+        end = heads[i + 1].start() if i + 1 < len(heads) else min(len(html), m.end() + 12000)
+        seg = html[m.end():end]
+        heading, body_start = None, m.end()
+        nm = _HTML_NOTE.match(seg)
+        if nm:
+            heading = _clean(nm.group(1) or nm.group(2) or "") or None
+            body_start = m.end() + nm.end()
+        body = _clean(html[body_start:end])
+        _add_article(rs, cite_prefix, i, token, heading, body)
+    return rs
+
+
+# ── mode: WIPO PDF → pdftotext text (WCT / WPPT) ─────────────────────────────
+_PDF_HEAD = re.compile(r"^[ \t\x0c]*Article\s+(\d+)([A-Za-z]*)\s*$")
+_PDF_NOISE = re.compile(r"^\s*(page\s+\d+/\d+|\x0c)\s*$", re.I)
+
+
+def _parse_wipo_pdf(path: str, cite_prefix: str) -> RecordSet:
+    raw = open(path, encoding="utf-8", errors="replace").read()
+    lines = raw.split("\n")
+    # locate article heading lines; stop the whole treaty at the "Note: The agreed statements" line
+    stop = len(lines)
+    for j, ln in enumerate(lines):
+        if re.match(r"\s*Note:\s*The agreed statements", ln):
+            stop = j
+            break
+    heads: list[tuple[int, str, str]] = []
+    for j in range(stop):
+        m = _PDF_HEAD.match(lines[j])
+        if m:
+            heads.append((j, m.group(1), m.group(2)))
+    rs = RecordSet()
+    for k, (j, num, suf) in enumerate(heads):
+        token = f"{num}{suf}"
+        end = heads[k + 1][0] if k + 1 < len(heads) else stop
+        block = lines[j + 1:end]
+        block = [ln for ln in block if not _PDF_NOISE.match(ln) and ln.strip() != "\x0c"]
+        # heading = the first non-blank line after "Article N"; body = the rest
+        heading = None
+        rest_start = 0
+        for idx, ln in enumerate(block):
+            s = ln.strip().replace("\x0c", "")
+            if s:
+                heading = s
+                rest_start = idx + 1
+                break
+        body_lines = [ln.replace("\x0c", "") for ln in block[rest_start:]]
+        body = re.sub(r"\s+", " ", " ".join(body_lines)).strip()
+        _add_article(rs, cite_prefix, k, token, heading, body)
+    return rs
+
+
+# ── mode: WTO-hosted HTML (TRIPS) ────────────────────────────────────────────
+# Body heading: <h2 class="web_h2 web_ita …">Article N[bis]</h2> then marginal note in
+# <p class="center">…</p>. Anchor <a name="artN"> precedes it.
+_WTO_HEAD = re.compile(
+    r"<h2[^>]*class=\"[^\"]*web_ita[^\"]*\"[^>]*>\s*Article\s+(\d+)\s*(bis|ter)?\s*</h2>",
+    re.I)
+
+
+def _parse_wto_html(path: str, cite_prefix: str) -> RecordSet:
+    html = open(path, encoding="utf-8", errors="replace").read()
+    heads = list(_WTO_HEAD.finditer(html))
+    rs = RecordSet()
+    for i, m in enumerate(heads):
+        token = f"{m.group(1)}{m.group(2) or ''}"
+        end = heads[i + 1].start() if i + 1 < len(heads) else min(len(html), m.end() + 20000)
+        seg = html[m.end():end]
+        # marginal note = first centred paragraph; body = everything after it (so the note
+        # isn't duplicated at the head of the text).
+        hm = re.search(r"<p[^>]*class=\"[^\"]*center[^\"]*\"[^>]*>(.*?)</p>", seg, re.S | re.I)
+        heading = _clean(hm.group(1)) if hm else None
+        body = _clean(seg[hm.end():] if hm else seg)
+        _add_article(rs, cite_prefix, i, token, heading, body)
+    return rs
+
+
+# ── public parse() ───────────────────────────────────────────────────────────
+_MODES = {"wipo_html": _parse_wipo_html, "wipo_pdf": _parse_wipo_pdf,
+          "wto_html": _parse_wto_html}
+
+
+def parse(artifact_path: str, cite_prefix: str, mode: str) -> RecordSet:
+    """Parse a retained treaty artifact into a RecordSet of provisions. `mode` selects the
+    source shape (wipo_html | wipo_pdf | wto_html)."""
+    if mode not in _MODES:
+        raise SystemExit(f"unknown parse mode: {mode}")
+    return _MODES[mode](artifact_path, cite_prefix)
+
+
+def instrument(cfg: dict) -> dict:
+    return dict(jurisdiction="INT", type="treaty", ext_id_scheme="TREATY",
+                ext_id=cfg["slug"], official_citation=cfg["official_citation"],
+                title=cfg["title"])
+
+
+def ingest_one(key: str, db_path: str, allow_corpus: bool,
+               artifact_override: str | None = None) -> dict:
+    cfg = TREATIES[key]
+    path = artifact_override or os.path.join(_ART, cfg["artifact"])
+    if not os.path.exists(path):
+        raise SystemExit(f"artifact not found: {path}")
+    rs = parse(path, cfg["cite_prefix"], cfg["mode"])
+    stats = run_ingest(
+        db_path, instrument(cfg), rs, cfg["source_url"],
+        allow_corpus=allow_corpus,
+        is_authentic=1, is_consolidated=0, is_official_language=1,   # authentic official text
+        version_label=cfg["version_label"], fts_title=cfg["official_citation"])
+    stats["key"] = key
+    stats["official_citation"] = cfg["official_citation"]
+    return stats
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Ingest core copyright treaties (WIPO Lex / WTO).")
+    ap.add_argument("--treaty", required=True,
+                    help="one of: " + ", ".join(TREATIES) + ", or 'all'")
+    ap.add_argument("--db", required=True)
+    ap.add_argument("--artifact", default=None, help="override the retained artifact path")
+    ap.add_argument("--allow-corpus", action="store_true")
+    a = ap.parse_args()
+    keys = list(TREATIES) if a.treaty == "all" else [a.treaty]
+    for k in keys:
+        if k not in TREATIES:
+            raise SystemExit(f"unknown treaty '{k}' (choose from: {', '.join(TREATIES)}, all)")
+    for k in keys:
+        s = ingest_one(k, a.db, a.allow_corpus, a.artifact if a.treaty != "all" else None)
+        arts = s["by_kind"].get("article", 0)
+        paras = s["by_kind"].get("paragraph", 0)
+        print(f"[{k}] instrument #{s['instrument_id']}  {s['official_citation']}")
+        print(f"     provisions {s['provisions']}  (articles {arts}, paragraphs {paras})")
+        print(f"     versions   new {s['versions_new']}, unchanged {s['versions_unchanged']}")
+
+
+if __name__ == "__main__":
+    main()

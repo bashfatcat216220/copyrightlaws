@@ -6,13 +6,14 @@ _Last updated: 2026-08-13._
 
 ## Where we are (one breath)
 
-**Phase 0 done + Phase 2 jurisdiction breadth done** (18 instruments across US/UK/EU/INT +
-all 14 Tier-2 countries; see the corpus table). The KM IP — Statute Browser design is live
-over a section-level `provisions` model — full-width reader with a fixed-height shell,
-internal-scrolling rails, and KM marker-paragraph body formatting. **Tier-1 completions are
-IN PROGRESS** (2026-08-13): 3 parallel agents adding US 37 C.F.R., the remaining EU directives,
-and the core treaties (WCT/WPPT/Rome/Beijing/Marrakesh/TRIPS). See "Remaining work" for the
-full ordered backlog. corpus.db migrated + loaded; branch pushed.
+**Phase 0 done · jurisdiction breadth done · Tier-1 completions done.** **32 instruments ·
+14,088 provisions · 5,325 versions** across 18 jurisdictions. US = 17 U.S.C. + 37 C.F.R.;
+EU = 8 copyright directives (InfoSoc + DSM/Software/Database/Term/Rental/Orphan/Enforcement);
+INT = 7 treaties (Berne + WCT/WPPT/Rome/Beijing/Marrakesh/TRIPS); + all 14 Tier-2 countries
+(see the corpus table). The KM IP — Statute Browser design is live over the section-level
+`provisions` model — full-width reader, fixed-height shell, internal-scrolling rails, KM
+marker-paragraph body. Next up: the depth layers (see "Remaining work"). corpus.db migrated +
+loaded; branch pushed.
 
 - **Corpus (live in `corpus.db`):** **18 instruments · 12,857 provisions · 4,516 versions**,
   every version SHA-256'd with `source_url` + `retrieved_at`. **Phase 2 breadth: Tier-1 (4) +
@@ -131,17 +132,17 @@ pulls these live is not yet built — that's the automation step for change-moni
 **Sequencing (Bing): breadth before depth.** Tier-2 jurisdiction breadth is DONE (14 countries,
 2 agent waves — see the corpus table above). Work this list top-to-bottom:
 
-**1. Tier-1 completions — IN PROGRESS (2026-08-13, 3 parallel agents).** Round out US/EU/INT
-   depth; adds instruments *within* existing jurisdictions, no new ones.
-   - **US 37 C.F.R.** (Copyright Office regs, Parts ~201–212) — eCFR API, keyless →
-     `src/store/ingest_ecfr.py`.
+**1. Tier-1 completions — DONE (2026-08-13, 3 parallel agents).** Rounded out US/EU/INT depth
+   (14 new instruments, 18→32). All grounded, idempotent, scratch-validated before central load.
+   - **US 37 C.F.R.** (Copyright Office, Chapter II — Parts 201–212 + the Copyright Claims Board
+     parts) — eCFR full-title XML → `src/store/ingest_ecfr.py`. 209 sections.
    - **EU directives** (7) — DSM 2019/790, Software 2009/24, Database 96/9, Term 2006/116,
-     Rental/Lending 2006/115, Orphan Works 2012/28, Enforcement 2004/48 →
-     `src/store/ingest_eu_directive.py` (EUR-Lex act HTML: articles + recitals; is_authentic=1).
-   - **Core treaties** (6) — WCT, WPPT, Rome, Beijing, Marrakesh (WIPO Lex HTML) + TRIPS (WTO) →
-     `src/store/ingest_treaty.py` (generalized `ingest_berne.py` pattern).
-   - Each agent writes only its ingest + artifact (no corpus.db / shared-file / git touch); the
-     orchestrator scratch-validates + loads centrally + commits — same flow as the Tier-2 waves.
+     Rental 2006/115, Orphan Works 2012/28, Enforcement 2004/48 → `src/store/ingest_eu_directive.py`
+     (EUR-Lex original-act HTML: articles + recitals, is_authentic=1; `--all` registry).
+     125 articles + 267 recitals.
+   - **Core treaties** (6) — WCT, WPPT (WIPO PDF), Rome, Beijing, Marrakesh (WIPO HTML), TRIPS
+     (WTO HTML) → `src/store/ingest_treaty.py` (`--treaty all`). 218 articles. Agreed statements
+     kept inline for the HTML treaties, skipped for the WCT/WPPT PDFs (noted, minor asymmetry).
 
 **2. Depth layers** (after breadth is complete):
    a. **Change monitoring** — re-fetch → per-provision `content_sha256` diff → `alerts` row →
