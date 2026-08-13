@@ -16,7 +16,10 @@
   {# Jurisdiction index (the persistent rail moved here). Only jurisdictions that have
      instruments are shown as active; the rest render as scope, dimmed. #}
   {% for tier, rows in (jurs or {}).items() %}
-    <div class="jgroup">Tier {{ tier }}{% if tier == 1 %} · full text, versioned{% elif tier == 2 %} · full text{% else %} · scope{% endif %}</div>
+    <div class="jgroup">Tier {{ tier }}
+      {% if tier == 1 %} · Core — full text, versioned &amp; change-monitored
+      {% elif tier == 2 %} · Major jurisdictions — full text + amendment alerts
+      {% else %} · Metadata + link only{% endif %}</div>
     <div class="jgrid">
       {% for j in rows %}
         {% if j.n %}
