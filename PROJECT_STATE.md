@@ -10,26 +10,33 @@ _Last updated: 2026-08-12._
 `provisions` model, with real copyright law from all four Tier-1 source shapes ingested,
 searchable, and cited at the provision level. Migration applied to `corpus.db`; branch pushed.
 
-- **Corpus (live in `corpus.db`):** **11 instruments · 11,396 provisions · 3,306 versions**,
-  every version SHA-256'd with `source_url` + `retrieved_at`. Phase 2 breadth IN PROGRESS.
-  | Jur | Instrument | Source shape | Provisions | Lang |
+- **Corpus (live in `corpus.db`):** **18 instruments · 12,857 provisions · 4,516 versions**,
+  every version SHA-256'd with `source_url` + `retrieved_at`. **Phase 2 breadth: Tier-1 (4) +
+  all 14 Tier-2 countries DONE.**
+  | Jur | Instrument | Source | Provisions | Lang |
   |---|---|---|---|---|
   | US | 17 U.S.C. | USLM XML | 153 sections (4 deep) | official |
   | GB | CDPA 1988 | CLML XML | 436 sections + 349 schedule paras | official |
-  | EU | Directive 2001/29 (InfoSoc) | Formex XML + OJ HTML | 15 articles + 61 recitals | official |
+  | EU | Directive 2001/29 (InfoSoc) | Formex + OJ HTML | 15 articles + 61 recitals | official |
   | INT | Berne Convention | WIPO Lex HTML | 53 articles (bis/ter + Appendix) | official |
-  | DE | UrhG | gesetze-im-internet.de HTML | 252 sections | translation |
+  | DE | UrhG | gesetze-im-internet.de | 252 sections | translation |
   | CA | Copyright Act (C-42) | Justice Laws XML | 277 sections + 11 parts | official |
-  | AU | Copyright Act 1968 | legislation.gov.au HTML | 670 sections | official |
-  | NL | Auteurswet | IViR PDF (academic EN) | 138 articles | translation |
+  | AU | Copyright Act 1968 | legislation.gov.au | 670 sections | official |
+  | NL | Auteurswet | IViR PDF | 138 articles | translation |
   | IN | Copyright Act 1957 | India Code PDF | 105 sections | official |
   | SG | Copyright Act 2021 | SSO HTML | 541 sections | official |
-  | FR | CPI (Part I, copyright) | WIPO Lex PDF | 183 articles | translation |
+  | FR | CPI (Part I) | WIPO Lex PDF | 183 articles | translation |
+  | ES | TRLPI (RDL 1/1996) | WIPO Lex PDF | 170 articles | translation |
+  | IT | Law 633/1941 (LDA) | WIPO Lex PDF | 252 articles (bis/ter/quater) | translation |
+  | JP | Copyright Act (1970) | japaneselawtranslation.go.jp | 183 articles | translation |
+  | CN | Copyright Law (2020) | WIPO Lex (verbatim, Wikisource-checked) | 67 articles | translation |
+  | KR | Copyright Act | KLRI elaw | 180 articles | translation |
+  | BR | Law 9.610/1998 | WIPO Lex PDF | 122 articles | translation |
+  | MX | LFDA | WIPO Lex text-view | 238 articles | translation |
 - **Live server:** `uvicorn src.app:app` on `corpus.db`, http://127.0.0.1:8021 — the section
-  reader shows real law across all 11; search is grounded (`fair use`→§107, `fair dealing`→CA
-  s.29 / AU s.40, `parody`→InfoSoc Art.5(3)(k) / CA s.29 / FR L122-5).
-- **Git:** `main` pushed to `origin` (github.com/bashfatcat216220/copyrightlaws.git); latest
-  `0b6f06c`. `pytest` 6/6.
+  reader shows real law across all 18; search grounded (`fair use`→§107, `fair dealing`→CA
+  s.29 / AU s.40, `parody`→InfoSoc Art.5(3)(k) / FR L122-5, moral rights across every act).
+- **Git:** `main` pushed to `origin` (github.com/bashfatcat216220/copyrightlaws.git). `pytest` 6/6.
 - **Environment:** repo at `~/TIngey/copyright-corpus`; run python via
   `~/Julie/ai-law-portal/.venv/bin/python` (fastapi/uvicorn/jinja2). No `sqlite3` CLI on this
   box — use Python's `sqlite3`. `~/TIngey/copyright-news-site` is a SEPARATE project — never
@@ -140,14 +147,20 @@ tail / WIPO-Lex metadata index yet (that's a later, shallower pass).
   Articles L111-1…; etc.), and most are UNOFFICIAL translations → `is_official_language=0`
   (flagged). So each country = its own source hunt + bespoke parser, but the DB-writer +
   provision model are identical.
-  - **DONE (7 of 14):** DE, CA, AU, NL, IN, SG, FR — each `src/store/ingest_<cc>.py` built on
-    `_common` (see the corpus table above for source/counts/lang). Official English where the
-    country publishes it (CA/AU/IN/SG); translations flagged `is_official_language=0` (DE/NL/FR).
-    All idempotent, grounded, validated on scratch before loading. Wave 1 ran as 6 parallel
-    agents; each wrote only its ingest + artifact (no corpus.db / shared-file / git touch), and
-    the orchestrator loaded them centrally.
-  - **REMAINING (7):** ES, IT, JP, CN, KR, BR, MX — wave 2 (same fan-out). Plus Tier-1
-    completions (EU directives via Formex, treaties via Berne pattern, 37 C.F.R. via eCFR).
+  - **ALL 14 DONE (2 waves of parallel agents):** DE, CA, AU, NL, IN, SG, FR (wave 1) + ES,
+    IT, JP, CN, KR, BR, MX (wave 2). Each `src/store/ingest_<cc>.py` built on `_common` (see
+    the corpus table for source/counts/lang). Official English where published (CA/AU/IN/SG),
+    else translations flagged `is_official_language=0`. All idempotent, grounded, scratch-
+    validated before loading. Each agent wrote only its ingest + artifact (no corpus.db /
+    shared-file / git touch); the orchestrator validated + loaded centrally.
+  - **Sourcing notes worth keeping:** WIPO Lex PDFs sit behind CloudFront presigned URLs (grab
+    the signed link off the details page; bare paths 301/403). MX has no English PDF anymore →
+    used WIPO's text-view HTML. CN's CDN 403s scripted fetch → verbatim text via a reader proxy,
+    cross-checked against Wikisource. NL used the IViR academic translation (WIPO PDF dead).
+  - **Tier-1 completions still open (Phase-2 tail):** EU directives (DSM 2019/790 + others) via
+    the Formex pattern (needs `ingest_formex.py` generalized off the hardcoded InfoSoc identity),
+    core treaties (TRIPS/WCT/WPPT/Rome/Beijing/Marrakesh) via the Berne HTML pattern, US 37 C.F.R.
+    via eCFR. These round out US/EU/INT depth; no NEW jurisdictions.
   - **`_common.py` extracted (`ef8ecdc`)** — a new country ingest is now just `parse()` + an
     INSTRUMENT dict + a thin `main()`; agents copy `ingest_de_urhg.py` as the template.
   - **Sourcing reality (confirmed across wave 1):** heterogeneous — official HTML/XML (CA/AU/
