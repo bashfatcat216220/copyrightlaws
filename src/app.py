@@ -72,8 +72,14 @@ def index(request: Request):
     recent = [dict(r) for r in conn.execute(
         "SELECT id, title, official_citation, jurisdiction FROM instruments "
         "ORDER BY last_updated_at DESC LIMIT 12")]
+    # distinct official-source domains, for the sources note at the foot of the home page
+    from urllib.parse import urlparse
+    srcs = {urlparse(u).netloc.replace("www.", "")
+            for (u,) in conn.execute("SELECT DISTINCT source_url FROM versions WHERE source_url IS NOT NULL")
+            if u and urlparse(u).netloc}
     return templates.TemplateResponse(request, "index.html",
-                                      _ctx(conn, active_nav="browse", stats=stats, recent=recent))
+                                      _ctx(conn, active_nav="browse", stats=stats, recent=recent,
+                                           sources=sorted(srcs)))
 
 
 @app.get("/search", response_class=HTMLResponse)

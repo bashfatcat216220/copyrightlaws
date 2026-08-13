@@ -34,5 +34,11 @@
       {% endfor %}
     </div>
   {% endfor %}
+
+  {% if sources %}
+    <p class="sources"><em>Sources — official texts fetched from: {{ sources|join(' · ') }}. An
+      internal finding aid: every provision links its source and retrieval date; confirm against
+      the official source before relying on it.</em></p>
+  {% endif %}
 </div>
 {% endblock %}

@@ -196,22 +196,34 @@ def _upsert_provision(conn, iid, parent_id, r) -> int:
 
 
 def _store_version(conn, iid, provid, r, source_url, point_in_time) -> str:
+    # Idempotent BY CONTENT (matches _common): a re-fetch only versions a provision if its text
+    # differs from the current version; on change, update the pit slot in place or insert new.
     content = r["content"]
     digest = sha256(content)
-    existing = conn.execute(
-        "SELECT content_sha256 FROM versions WHERE instrument_id=? AND provision_id=? "
-        "AND point_in_time IS ? AND language='en'", (iid, provid, point_in_time)).fetchone()
+    cur = conn.execute("SELECT content_sha256 FROM versions WHERE instrument_id=? AND "
+                       "provision_id=? AND is_current=1", (iid, provid)).fetchone()
     outcome = "unchanged"
-    if not existing or existing[0] != digest:
+    if not cur or cur[0] != digest:
         conn.execute("UPDATE versions SET is_current=0 WHERE instrument_id=? AND provision_id=?",
                      (iid, provid))
-        cur = conn.execute(
-            "INSERT INTO versions (instrument_id, provision_id, version_label, point_in_time, "
-            "language, content, content_sha256, source_url, retrieved_at, is_current) "
-            "VALUES (?,?,?,?, 'en', ?,?,?,?, 1)",
-            (iid, provid, "legislation.gov.uk", point_in_time, content, digest, source_url, now_iso()))
+        slot = conn.execute("SELECT id FROM versions WHERE instrument_id=? AND provision_id=? "
+                            "AND point_in_time IS ? AND language='en'",
+                            (iid, provid, point_in_time)).fetchone()
+        if slot:
+            conn.execute("UPDATE versions SET content=?, content_sha256=?, source_url=?, "
+                         "retrieved_at=?, is_current=1 WHERE id=?",
+                         (content, digest, source_url, now_iso(), slot[0]))
+            vid = slot[0]
+            conn.execute("DELETE FROM versions_fts WHERE rowid=?", (vid,))
+        else:
+            c2 = conn.execute(
+                "INSERT INTO versions (instrument_id, provision_id, version_label, point_in_time, "
+                "language, content, content_sha256, source_url, retrieved_at, is_current) "
+                "VALUES (?,?,?,?, 'en', ?,?,?,?, 1)",
+                (iid, provid, "legislation.gov.uk", point_in_time, content, digest, source_url, now_iso()))
+            vid = c2.lastrowid
         conn.execute("INSERT INTO versions_fts (rowid, title, citation, body) VALUES (?,?,?,?)",
-                     (cur.lastrowid, "CDPA 1988", r["citation"], content))
+                     (vid, "CDPA 1988", r["citation"], content))
         outcome = "new"
     conn.execute("DELETE FROM provisions_fts WHERE rowid=?", (provid,))
     conn.execute("INSERT INTO provisions_fts (rowid, citation, heading, body) VALUES (?,?,?,?)",
