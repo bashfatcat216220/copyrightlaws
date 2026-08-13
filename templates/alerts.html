@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Alerts — Copyright Corpus{% endblock %}
+{% block crumb %}<a href="/">CORPUS</a> › ALERTS{% endblock %}
+{% block body %}
+<div class="page">
+  <div class="kicker">Change monitor</div>
+  <h1 class="title">Amendment alerts</h1>
+  <p class="lead">Fired when a re-fetch brings changed text for a provision — each is a real
+    diff between the prior stored version and the current one. Redlines are grounded in fetched
+    source text, never originated.</p>
+
+  {% if not alerts %}
+    <p class="empty">No alerts yet. They appear once a monitored source changes and the corpus
+      is re-fetched (the per-provision content hash is the change key).</p>
+  {% else %}
+    <div class="headrule"><div class="rt">{{ alerts|length }} ALERT{{ '' if alerts|length == 1 else 'S' }}</div></div>
+    {% for a in alerts %}
+      <div class="alertrow">
+        <div>
+          <a class="acite" href="/instrument/{{ a.iid }}?sec={{ a.pid }}">{{ a.citation or a.official_citation }}</a>
+          <div class="arule">{{ a.rule }}</div>
+        </div>
+        <div>
+          <div class="ah">{{ a.heading or a.official_citation }}</div>
+          <div class="adiff">
+            {% for span in a.summary.split('   ') %}{% set span = span.strip() %}{% if span %}<span class="{{ 'del' if span[0] == '−' else 'ins' }}">{{ span[2:] }}</span> {% endif %}{% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

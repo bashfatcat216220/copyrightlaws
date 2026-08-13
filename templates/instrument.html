@@ -113,6 +113,13 @@
         {% if not sel.is_official_language %}<span class="flag warn" style="margin:0;">Unofficial translation</span>{% endif %}
       </div>
 
+      {% if sel.redline_spans %}
+        <div class="redline">
+          <span class="rl-lbl">Changed{% if sel.redline_old_pit %} since {{ sel.redline_old_pit }}{% endif %} · {{ sel.redline_rule }}</span>
+          {% for op, text in sel.redline_spans %}<span class="{{ 'del' if op == '−' else 'ins' }}">{{ text }}</span> {% endfor %}
+        </div>
+      {% endif %}
+
       {% if sel.body %}
         {% for p in sel.body %}
           <div class="bodypara"><div class="mark">{{ p.mark }}</div><div class="txt">{{ p.text }}</div></div>

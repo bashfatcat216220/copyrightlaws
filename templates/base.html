@@ -214,6 +214,23 @@
     .placeholder-banner{font-family:var(--mono); font-size:9.5px; letter-spacing:0.14em;
       text-transform:uppercase; color:var(--faint); border-left:2px solid var(--rule);
       padding-left:9px; margin:18px 0;}
+    /* change-monitor redline (amendment = rust; removed struck, added navy) */
+    .redline{border-left:3px solid var(--rust); background:var(--paper-warm2); padding:12px 16px;
+      margin:20px 0; font-family:var(--sans); font-size:13px; line-height:1.75; color:var(--body-muted);}
+    .redline .rl-lbl{font-family:var(--mono); font-size:9.5px; letter-spacing:0.13em;
+      text-transform:uppercase; color:var(--rust); display:block; margin-bottom:7px;}
+    .redline .del{color:var(--rust); text-decoration:line-through; text-decoration-thickness:1px;}
+    .redline .ins{color:var(--navy);}
+    /* alerts list */
+    .alertrow{display:grid; grid-template-columns:150px 1fr; gap:18px; padding:15px 8px;
+      border-bottom:1px solid var(--rule-light);}
+    .alertrow:hover{background:var(--paper-warm);}
+    .alertrow .acite{font-family:var(--mono); font-size:12.5px; color:var(--navy);}
+    .alertrow .arule{font-family:var(--mono); font-size:10px; letter-spacing:0.06em; color:var(--rust); margin-top:4px;}
+    .alertrow .ah{font-family:var(--serif); font-size:15px; color:var(--ink);}
+    .alertrow .adiff{font-family:var(--sans); font-size:12.5px; line-height:1.7; color:var(--body-muted); margin-top:5px;}
+    .alertrow .adiff .del{color:var(--rust); text-decoration:line-through;}
+    .alertrow .adiff .ins{color:var(--navy);}
     .lawtext{font-family:var(--serif); font-size:16.5px; line-height:1.72; color:var(--body);
       white-space:pre-wrap; text-wrap:pretty; margin:18px 0;}
     /* KM body: a subsection marker column + serif reading text, one row per paragraph */
@@ -250,6 +267,7 @@
     <nav class="topnav">
       <a href="/" class="{{ 'active' if active_nav == 'browse' }}">Browse</a>
       <a href="/search" class="{{ 'active' if active_nav == 'search' }}">Search</a>
+      <a href="/alerts" class="{{ 'active' if active_nav == 'alerts' }}">Alerts{% if counts.alerts %} · {{ counts.alerts }}{% endif %}</a>
       <a href="/matrix" class="{{ 'active' if active_nav == 'matrix' }}">Matrix</a>
     </nav>
     <span class="spacer"></span>

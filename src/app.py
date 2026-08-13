@@ -52,6 +52,7 @@ def _counts(conn: sqlite3.Connection) -> dict:
         "jurisdictions": conn.execute("SELECT COUNT(*) FROM jurisdictions").fetchone()[0],
         "instruments": conn.execute("SELECT COUNT(*) FROM instruments").fetchone()[0],
         "versions": conn.execute("SELECT COUNT(*) FROM versions").fetchone()[0],
+        "alerts": conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0],
     }
 
 
@@ -150,6 +151,25 @@ def _section_reader(conn, iid, sec):
         sel["body"] = _format_body(sel.get("content"), sel.get("heading"))
         sel["nver"] = conn.execute("SELECT COUNT(*) FROM versions WHERE provision_id=?",
                                    (sel_id,)).fetchone()[0]
+        sel["history"] = [dict(r) for r in conn.execute(
+            "SELECT point_in_time, retrieved_at, is_current FROM versions "
+            "WHERE provision_id=? ORDER BY retrieved_at DESC", (sel_id,))]
+        # if this provision's current version is an alert's new_version, show the redline
+        al = conn.execute(
+            "SELECT a.summary, a.rule, ov.point_in_time AS old_pit "
+            "FROM alerts a JOIN versions nv ON nv.id=a.new_version "
+            "LEFT JOIN versions ov ON ov.id=a.old_version "
+            "WHERE nv.provision_id=? AND nv.is_current=1 ORDER BY a.id DESC LIMIT 1", (sel_id,)).fetchone()
+        if al:
+            sel["redline_rule"] = al["rule"]
+            sel["redline_old_pit"] = al["old_pit"]
+            spans = []
+            for span in (al["summary"] or "").split("   "):
+                span = span.strip()
+                if span:
+                    op, _, txt = span.partition(" ")
+                    spans.append((op, txt))
+            sel["redline_spans"] = spans
     return rail, sel
 
 
@@ -255,6 +275,24 @@ def instrument(request: Request, iid: int, tab: str = "cases",
         ctx.update(view="whole", ver=dict(ver) if ver else None, versions=versions)
     return templates.TemplateResponse(request, "instrument.html",
                                       _ctx(conn, active_jur=inst["jurisdiction"] if inst else None, **ctx))
+
+
+@app.get("/alerts", response_class=HTMLResponse)
+def alerts(request: Request):
+    conn = _conn()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT a.id, a.rule, a.summary, a.notified_at, "
+        "  i.id AS iid, i.jurisdiction, i.official_citation, "
+        "  p.id AS pid, p.citation, p.heading, "
+        "  ov.point_in_time AS old_pit, nv.point_in_time AS new_pit "
+        "FROM alerts a "
+        "JOIN instruments i ON i.id=a.instrument_id "
+        "LEFT JOIN versions nv ON nv.id=a.new_version "
+        "LEFT JOIN versions ov ON ov.id=a.old_version "
+        "LEFT JOIN provisions p ON p.id=nv.provision_id "
+        "ORDER BY a.notified_at DESC, a.id DESC")]
+    return templates.TemplateResponse(request, "alerts.html",
+                                      _ctx(conn, active_nav="alerts", alerts=rows))
 
 
 @app.get("/matrix", response_class=HTMLResponse)
