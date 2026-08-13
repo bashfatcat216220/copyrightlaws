@@ -122,8 +122,8 @@
       border-bottom:1px solid var(--rule-light);}
     .secitem:hover{background:var(--paper-warm); text-decoration:none;}
     .secitem .sn{font-family:var(--mono); font-weight:500; font-size:14px; color:var(--navy);
-      width:68px; flex:none;}
-    .secitem .st{font-family:var(--serif); font-size:15px; line-height:1.4; color:var(--body);}
+      width:var(--numw, 6ch); flex:none; white-space:nowrap;}
+    .secitem .st{font-family:var(--serif); font-size:15px; line-height:1.4; color:var(--body); min-width:0;}
     .page{padding:26px 34px 48px;}
 
     /* ── Reading-column vocabulary ────────────────────────────────────── */

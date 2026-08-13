@@ -225,10 +225,14 @@ def _chapter_index(conn, iid, chap):
         return r
 
     leaves = [r for r in rows if r["kind"] in _LEAF_KINDS]
+    # width (in ch) of the widest provision number in a grid — the section-number column is
+    # sized to this so numbers and titles line up in a fixed spot regardless of number length.
+    numw = lambda g: max((len(r["label"]) for r in g), default=5) + 1
     tops = [r for r in rows if r["parent_id"] is None and r["kind"] in _CONTAINER_KINDS]
     if not tops:                                            # flat instrument — no chapter rail
+        grid = sorted(leaves, key=key)
         return {"flat": True, "chapters": [], "selected": None, "sel_chap": None,
-                "grid": sorted(leaves, key=key)}
+                "grid": grid, "numw": numw(grid)}
     groups: dict = {}
     for lf in leaves:
         groups.setdefault(top(lf)["id"], []).append(lf)
@@ -239,8 +243,9 @@ def _chapter_index(conn, iid, chap):
                          "n": len(secs),
                          "range": f"{secs[0]['label']}–{secs[-1]['label']}" if secs else ""})
     sel = chap if (chap in groups) else (chapters[0]["id"] if chapters else None)
+    grid = sorted(groups.get(sel, []), key=key)
     return {"flat": False, "chapters": chapters, "selected": sel, "sel_chap": by_id.get(sel),
-            "grid": sorted(groups.get(sel, []), key=key)}
+            "grid": grid, "numw": numw(grid)}
 
 
 @app.get("/instrument/{iid}", response_class=HTMLResponse)

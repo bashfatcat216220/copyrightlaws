@@ -66,7 +66,7 @@
       </div>
       <div class="rt">{{ ci.grid|length }} PROVISION{{ '' if ci.grid|length == 1 else 'S' }}</div>
     </div>
-    <div class="secgrid">
+    <div class="secgrid" style="--numw: {{ ci.numw }}ch;">
       {% for s in ci.grid %}
         <a class="secitem" href="/instrument/{{ inst.id }}?sec={{ s.id }}">
           <span class="sn">{{ s.label }}</span><span class="st">{{ s.heading or '' }}</span>
