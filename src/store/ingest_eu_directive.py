@@ -10,8 +10,10 @@ nothing is typed from memory. If a directive's HTML won't parse cleanly it is sk
 and reported, never fabricated (prime rule 1).
 
 This is the ORIGINAL adopted act (the OJ text as published), so its version rows carry
-is_authentic=1, is_consolidated=1, is_official_language=1 (English is an official EU
-language). Same idempotency + corpus.db guard as the other ingests, via `_common`.
+is_authentic=1, is_consolidated=0, is_official_language=1 (English is an official EU
+language). For directives that were later amended, `ingest_eu_consolidated.py` layers the
+current consolidated text (is_authentic=0) over the article provisions. Same idempotency +
+corpus.db guard as the other ingests, via `_common`.
 
 Two EUR-Lex HTML families are handled (auto-detected):
   * MODERN OJ (DSM 2019/790, Software 2009/24, Term 2006/116, Rental 2006/115,
@@ -281,7 +283,7 @@ def ingest_one(db_path: str, celex: str, html_path: str, source_url: str,
     inst = _instrument(celex)
     rs = parse(html_path, celex)
     stats = run_ingest(db_path, inst, rs, source_url, allow_corpus=allow_corpus,
-                       is_authentic=1, is_consolidated=1, is_official_language=1,
+                       is_authentic=1, is_consolidated=0, is_official_language=1,
                        version_label="EUR-Lex (original OJ act)",
                        fts_title=inst["official_citation"])
     stats["celex"] = celex

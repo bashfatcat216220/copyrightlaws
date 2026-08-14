@@ -140,6 +140,16 @@ pulls these live is not yet built — that's the automation step for change-moni
   metadatum is imprecise. Cheap fix: set `status='repealed'|'renumbered'|'reserved'` on those rows.
 - **`point_in_time` NULL on US versions** — 17 U.S.C. / 37 C.F.R. currency is implied by the
   release-point / eCFR-date in `source_url`, not stamped in `point_in_time` (UK versions do carry it).
+- **InfoSoc sub-article nodes lag by one consolidation** — the EU consolidation re-base is
+  article-level, so InfoSoc's ARTICLE text is current (2019-06-06) but its Formex-derived
+  paragraph/clause CHILD provisions (Art. 5(3)(k) etc.) stay at the 2017-10-10 consolidation. The
+  2017→2019 delta is small (DSM cross-amendments) and the children are low-visibility (rail is
+  chapter→article), but a future clean-up is to re-base InfoSoc from a 2019 Formex manifestation
+  so the pinpoint children match their parent. Term/Database have no sub-article nodes (article-level).
+- **EU monitor must skip cross-manifestation transitions** — the original-act → consolidated
+  version step is a manifestation re-base, not an amendment; the daily cron only monitors UK+US so
+  this is moot today, but if the monitor is ever pointed at EU it would fire formatting-noise alerts
+  on that transition. Gate it (e.g. only diff same-`version_label` or same-source transitions).
 
 ## Audit & remediation (2026-08-14, 4 fable read-only agents)
 
@@ -171,11 +181,29 @@ verbatim) but surfaced **3 concrete defects — all now FIXED on both `corpus.db
    monitor → **91st alert** fired (Schedule 2 para 19 reference removed). `ingest_clml` now strips
    trailing dots from `Pnumber` (both P1 and sub-levels) so citations are stable across snapshots.
 
-**Deferred (needs Bing's go-ahead — more involved):**
-4. **EU consolidation currency.** Audit flagged that a few EU directives (Term / InfoSoc /
-   Database) may be pointed at an older EUR-Lex consolidation than the latest. Re-pointing means
-   re-fetching CELLAR consolidations + re-ingesting; not a data-corruption issue (text is authentic
-   as-of its stated version), so parked until confirmed.
+4. **EU consolidation currency — FIXED (2026-08-14).** Grounded the audit's flag against live
+   EUR-Lex: of the 8 EU directives, exactly **3** were materially out of date (confirmed by the
+   consolidated-version list on each act's EUR-Lex ALL page) — the other 5 (DSM, Software, Rental,
+   Orphan, Enforcement) have no post-adoption amendment, so their authentic original text IS current
+   and was left as authentic=1 (authentic beats an editorial consolidation when there's no gap).
+   Re-based the 3 onto their **latest consolidated version** via `src/store/ingest_eu_consolidated.py`
+   (new; parses the modern EUR-Lex **ELI consolidated HTML** — `eli-subdivision`/`title-article-norm`/
+   `no-parag`, strips ►M/▼M/◄ amendment markers), loaded as **is_authentic=0, is_consolidated=1**,
+   `point_in_time` = the consolidation date, behind the "Consolidated — not authentic" banner:
+   - **Term 2006/116 → 2011-10-31** (Dir. 2011/77 term extension). The important one: the corpus
+     had the pre-2011 term rules — Art. 3 now carries the **70-year** phonogram term (old text had
+     zero "70 years"; new has 3), and the **inserted Article 10a** was created (a genuinely new
+     provision). 9 articles re-based.
+   - **Database 96/9 → 2019-06-06** (Dir. (EU) 2019/790 amendment). 14 articles re-based.
+   - **InfoSoc 2001/29 → 2019-06-06** (refresh from 2017-10-10). 13 articles re-based.
+   Discipline: consolidated ELI HTML drops recitals, so only ARTICLES were re-based — **recitals
+   keep their authentic-original version** (untouched). Because diffing consolidated-ELI text against
+   the original-act extraction is cross-source formatting noise, the change monitor was **NOT** run
+   for this (it's a manifestation re-base, not an observed amendment — firing "changed" alerts would
+   misrepresent reformatting as a legal change). No-clobber: existing article provisions got a NEW
+   version only; their row/parent/children were never rewritten. Also fixed a source **mislabel**:
+   `ingest_eu_directive` had tagged original acts `is_consolidated=1` (self-contradictory) → now 0,
+   and 392 existing original-act versions were corrected.
 
 ## Remaining work — finish in this order
 
