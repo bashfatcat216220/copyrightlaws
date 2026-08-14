@@ -63,6 +63,11 @@ _ART_ANCHOR = re.compile(r'<div\b[^>]*class="eli-subdivision"[^>]*id="art_([0-9a
 _ART_TITLE = re.compile(r'<p\b[^>]*class="title-article-norm"[^>]*>(.*?)</p>', re.S | re.I)
 _ART_HEAD = re.compile(r'<div\b[^>]*class="eli-title"[^>]*>\s*<p\b[^>]*>(.*?)</p>', re.S | re.I)
 _NUM = re.compile(r'Article\s+([0-9]+[a-z]*)', re.I)
+# end-of-enacting-terms boundary: the annex, footnote definitions, or the page-footer scripts.
+# The LAST article's region runs to end-of-page, so cap it here or it swallows the annex + JS.
+_END_CAP = re.compile(
+    r'<hr\b[^>]*class="separator-(?:annex|short)"|<p\b[^>]*class="title-annex-1"'
+    r'|<p\b[^>]*class="footnote"|<script\b', re.I)
 
 
 def now_iso() -> str:
@@ -70,7 +75,10 @@ def now_iso() -> str:
 
 
 def _strip(frag: str) -> str:
-    """ELI fragment -> clean text: drop footnote/modref/arrow spans + amendment glyphs, tags."""
+    """ELI fragment -> clean text: drop script/style + footnote/modref/arrow spans + amendment
+    glyphs, tags. Script/style FIRST so page-footer JS can't survive as body text (the ELI page
+    ends with <script>…</script> blocks whose inner JS would otherwise leak into the last article)."""
+    frag = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", frag, flags=re.S | re.I)
     # editorial spans that are NOT operative text
     frag = re.sub(r'<span\b[^>]*class="(?:modref|arrow|note-tag|superscript|footnote)"[^>]*>.*?</span>',
                   " ", frag, flags=re.S | re.I)
@@ -90,6 +98,9 @@ def parse_articles(html: str, short: str) -> list[dict]:
         start = m.start()
         end = anchors[i + 1].start() if i + 1 < len(anchors) else len(html)
         region = html[start:end]
+        cap = _END_CAP.search(region)                         # trim annex/footnotes/footer-JS
+        if cap:
+            region = region[:cap.start()]
         tm = _ART_TITLE.search(region)
         nm = _NUM.search(_strip(tm.group(1))) if tm else None
         if not nm:
@@ -146,23 +157,33 @@ def ingest_one(conn, key: str) -> dict:
             pid = cur.lastrowid
             st["created_provisions"] += 1
         digest = hashlib.sha256(a["content"].encode()).hexdigest()
-        cur = conn.execute("SELECT content_sha256 FROM versions WHERE instrument_id=? AND "
-                           "provision_id=? AND is_current=1", (iid, pid)).fetchone()
-        if cur and cur[0] == digest:
+        label = f"EUR-Lex consolidated ({t['pit']})"
+        # A row may already occupy this (provision, point_in_time, language) UNIQUE slot from a
+        # prior run of this ingest — supersede IN PLACE rather than a colliding INSERT.
+        slot = conn.execute("SELECT id, content_sha256, is_current FROM versions WHERE "
+                            "instrument_id=? AND provision_id=? AND point_in_time IS ? AND "
+                            "language='en'", (iid, pid, t["pit"])).fetchone()
+        if slot and slot[1] == digest and slot[2]:
             st["unchanged"] += 1
             continue
         conn.execute("UPDATE versions SET is_current=0 WHERE instrument_id=? AND provision_id=?",
                      (iid, pid))
-        c = conn.execute(
-            "INSERT INTO versions (instrument_id, provision_id, version_label, point_in_time, "
-            "language, is_official_language, is_consolidated, is_authentic, content, "
-            "content_sha256, source_url, retrieved_at, is_current) "
-            "VALUES (?,?,?,?, 'en', 1, 1, 0, ?,?,?,?, 1)",
-            (iid, pid, f"EUR-Lex consolidated ({t['pit']})", t["pit"], a["content"], digest,
-             t["source_url"], now_iso()))
-        conn.execute("DELETE FROM versions_fts WHERE rowid=?", (c.lastrowid,))
+        if slot:                                              # same slot, changed text -> update
+            vid = slot[0]
+            conn.execute("UPDATE versions SET version_label=?, content=?, content_sha256=?, "
+                         "source_url=?, retrieved_at=?, is_current=1 WHERE id=?",
+                         (label, a["content"], digest, t["source_url"], now_iso(), vid))
+        else:
+            c = conn.execute(
+                "INSERT INTO versions (instrument_id, provision_id, version_label, point_in_time, "
+                "language, is_official_language, is_consolidated, is_authentic, content, "
+                "content_sha256, source_url, retrieved_at, is_current) "
+                "VALUES (?,?,?,?, 'en', 1, 1, 0, ?,?,?,?, 1)",
+                (iid, pid, label, t["pit"], a["content"], digest, t["source_url"], now_iso()))
+            vid = c.lastrowid
+        conn.execute("DELETE FROM versions_fts WHERE rowid=?", (vid,))
         conn.execute("INSERT INTO versions_fts (rowid, title, citation, body) VALUES (?,?,?,?)",
-                     (c.lastrowid, f"Directive {t['short']}", a["citation"], a["content"]))
+                     (vid, f"Directive {t['short']}", a["citation"], a["content"]))
         conn.execute("DELETE FROM provisions_fts WHERE rowid=?", (pid,))
         conn.execute("INSERT INTO provisions_fts (rowid, citation, heading, body) VALUES (?,?,?,?)",
                      (pid, a["citation"], a["heading"] or "", a["content"]))

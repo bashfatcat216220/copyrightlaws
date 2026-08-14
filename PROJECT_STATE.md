@@ -208,6 +208,41 @@ verbatim) but surfaced **3 concrete defects — all now FIXED on both `corpus.db
    `ingest_eu_directive` had tagged original acts `is_consolidated=1` (self-contradictory) → now 0,
    and 392 existing original-act versions were corrected.
 
+## Page / rendering audit (2026-08-14)
+
+Swept all 32 instruments + every page type (home, jurisdiction ×18, reader, chapter index,
+`/alerts`, `/search`) for "data's-there-but-renders-wrong" bugs. Final sweep: **0 junk hits,
+0 blank-body, 0 duplicate citations, all 32 instrument pages + 18 jurisdiction pages HTTP 200,
+a textful reader per jurisdiction all non-empty.** Bugs found and FIXED (both DBs):
+
+- **Heading-less lists looked empty (BR, FR)** — Brazilian/French statutes number articles but
+  don't title them, so the index/rail showed bare numbers. Now show a muted-italic **incipit**
+  (the provision's own opening ~90 chars) when there's no source heading — never an invented
+  title. Headed laws (US/DE/UK/EU) unchanged. (`_incipit`/`_fill_incipits` in `app.py`.)
+- **EU consolidated footer-JS + annex bleed (regression from the currency fix)** — the last
+  article of Term/Database swallowed the page-footer `<script>` jQuery and the ANNEX, because
+  `ingest_eu_consolidated._strip` stripped script *tags* but kept their inner JS, and the last
+  article's region ran to end-of-page. Fixed: strip `<script>/<style>` blocks before tags, and
+  end-cap each article region at the annex/footnote/script boundary (`_END_CAP`). Re-ingested;
+  Term Art. 14 / Database Art. 17 now end cleanly ("…addressed to the Member States."). Added
+  supersede-in-place to that ingest so re-runs don't collide on the pit UNIQUE slot.
+- **InfoSoc reverted by a `--which all` re-run** — re-running the consolidated ingest overwrote
+  the agent's Formex InfoSoc articles with ELI-HTML again; restored to the single 2019 Formex
+  manifestation (all 96 art/para/clause current versions back to one source, 0 junk).
+- **JP showed 20 empty "Section" entries** — Japanese acts are chapter > section > article, so
+  the `section` rows are containers (3–8 article children each) but were railing as empty
+  readable leaves. Fixed at the read layer: a `section` that contains `article` children is
+  treated as a container (rails as a group header, not a clickable entry). US/UK sections hold
+  subsections, never articles, so they're unaffected — survives a manifest rebuild.
+- **KR Art. 142 leaked `<div`** — one Korean article carried a scraped trailing HTML tag.
+  Stripped lowercase HTML tags from KR content (1 row); the 77 legitimate `<Amended by Act…>`
+  annotations (official Korean-law convention) are preserved and render correctly (escaped).
+
+Confirmed NON-bugs (left as-is, correct): DE repealed sections (labelled "(repealed)"), US
+17 U.S.C. / 37 C.F.R. reserved/renumbered brackets, KR `<Amended by…>` annotations. Known
+small gaps: **KR Art. 101-6 / 121** carry no heading or text (2 data gaps) — the reader shows
+its "Metadata only — read at source" placeholder, so not broken, just uncaptured.
+
 ## Remaining work — finish in this order
 
 **Sequencing (Bing): breadth before depth.** Tier-2 jurisdiction breadth is DONE (14 countries,

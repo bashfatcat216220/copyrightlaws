@@ -122,15 +122,21 @@ def _section_reader(conn, iid, sec):
     # paragraphs, and EU articles (InfoSoc). Source-derived kinds, never a jurisdiction
     # switch — the reader renders provision.label as stored ('§ 203' / 's. 12' / 'Article 5').
     LEAVES = "('section','article','schedule_para','recital')"
+    # A 'section' that CONTAINS 'article' children is a container, not a readable leaf
+    # (JP structures its act chapter > section > article) — exclude it so it rails as a group
+    # header rather than an empty clickable entry. US/UK sections hold subsections, never
+    # articles, so they are unaffected.
+    NOTC = ("NOT ({a}.kind='section' AND EXISTS (SELECT 1 FROM provisions ch "
+            "WHERE ch.parent_id={a}.id AND ch.kind='article'))")
     n = conn.execute("SELECT COUNT(*) FROM provisions WHERE instrument_id=? "
-                     f"AND kind IN {LEAVES}", (iid,)).fetchone()[0]
+                     f"AND kind IN {LEAVES} AND {NOTC.format(a='provisions')}", (iid,)).fetchone()[0]
     if not n:
         return None, None
     rows = [dict(r) for r in conn.execute(
         "SELECT s.id, s.label, s.heading, s.citation, s.kind, "
         "  c.label AS chap_label, c.sort_int AS c_si, c.sort_suffix AS c_su "
         "FROM provisions s LEFT JOIN provisions c ON c.id=s.parent_id "
-        f"WHERE s.instrument_id=? AND s.kind IN {LEAVES} "
+        f"WHERE s.instrument_id=? AND s.kind IN {LEAVES} AND {NOTC.format(a='s')} "
         "ORDER BY c.sort_int, c.sort_suffix COLLATE BINARY, "
         "         s.sort_int, s.sort_suffix COLLATE BINARY", (iid,))]
     # Recitals (kind='recital') are top-level (no chapter) and precede the articles — rail
@@ -264,7 +270,10 @@ def _chapter_index(conn, iid, chap):
             r = by_id[r["parent_id"]]
         return r
 
-    leaves = [r for r in rows if r["kind"] in _LEAF_KINDS]
+    # sections that contain 'article' children are containers (JP chapter>section>article), not leaves
+    _art_parents = {r["parent_id"] for r in rows if r["kind"] == "article" and r["parent_id"]}
+    leaves = [r for r in rows if r["kind"] in _LEAF_KINDS
+              and not (r["kind"] == "section" and r["id"] in _art_parents)]
     # width (in ch) of the widest provision number in a grid — the section-number column is
     # sized to this so numbers and titles line up in a fixed spot regardless of number length.
     numw = lambda g: max((len(r["label"]) for r in g), default=5) + 1
