@@ -43,16 +43,21 @@ SECTION_GROUP = re.compile(r"^Section \d+\b")
 # Page-break noise from pdftotext: a bare 3-digit page number, or the running header/footer.
 PAGE_NUM = re.compile(r"^\s*\d{2,3}\s*$")
 RUNNING = re.compile(r"^\s*(Copyright Act . Auteurswet|Mireille van Eechoud)\s*$")
+# A page-bottom FOOTNOTE definition: a number then a WIDE gap then the note ("2   Koninklijke
+# Bibliotheek."). Distinct from an operative list item, which is "1. text" (number + a dot).
+FOOTNOTE = re.compile(r"^\s*\d+\s{2,}\S")
 
 
 def _is_noise(line: str) -> bool:
-    return bool(PAGE_NUM.match(line) or RUNNING.match(line))
+    return bool(PAGE_NUM.match(line) or RUNNING.match(line) or FOOTNOTE.match(line))
 
 
 def _clean(lines: list[str]) -> str:
-    """Join an article's body lines, dropping page-break noise, into operative text."""
+    """Join an article's body lines, dropping page-break + footnote noise, into operative text."""
     kept = [ln.rstrip() for ln in lines if not _is_noise(ln)]
-    return re.sub(r"\s+", " ", " ".join(kept)).strip()
+    text = re.sub(r"\s+", " ", " ".join(kept)).strip()
+    text = re.sub(r"(?<=[a-z])\d(?=[\s.,;)])", "", text)   # strip a footnote digit glued to a word
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def parse(path: str) -> RecordSet:

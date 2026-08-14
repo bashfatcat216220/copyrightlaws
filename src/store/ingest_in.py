@@ -50,7 +50,13 @@ FOOTCONT = re.compile(r'^\s*\(?w\.e\.f\.[^)]*\)?\.?\s*$', re.I)
 
 
 def _clean(text: str) -> str:
-    """Collapse whitespace and drop stray amendment superscripts left mid-line (e.g. '2[')."""
+    """Collapse whitespace and strip Indian amendment apparatus. Indian statutes print amended
+    text as 'N[current text]' (N = amending-act footnote) and omissions as 'N***'. Keep the
+    operative text inside the brackets; drop the footnote number, the brackets, and the omission
+    stars — e.g. '2[Appellate Board]' → 'Appellate Board', '5*** 6[Designs Act]' → 'Designs Act'."""
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\d+\s*\*+', '', text)     # 'N***' omitted-words marker → drop
+    text = re.sub(r'\d*\[|\]', '', text)      # 'N[' / '[' / ']' amendment brackets → drop, keep inside
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
