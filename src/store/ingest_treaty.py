@@ -105,7 +105,9 @@ TREATIES: dict[str, dict] = {
 
 
 def _clean(frag: str) -> str:
-    """HTML fragment → plain text: drop empty anchors + footnote superscripts, strip tags."""
+    """HTML fragment → plain text: drop script/style + empty anchors + footnote superscripts,
+    strip tags. Script/style go FIRST so page-footer JS can't survive as body text."""
+    frag = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", frag, flags=re.S | re.I)
     frag = re.sub(r"<a\s+[^>]*name[^>]*>\s*</a>", "", frag)
     frag = re.sub(r"<sup>.*?</sup>", "", frag, flags=re.S)       # WIPO footnote refs
     frag = re.sub(r"<[^>]+>", " ", frag)
@@ -123,12 +125,17 @@ def _add_article(rs: RecordSet, cite_prefix: str, i: int, token: str, heading: s
                  sort_int=si, sort_suffix=su, role="enacting", citation=cite,
                  content=body or None)
     # child paragraphs: "(1) …" (WIPO) or "1. …" (WTO). Addressable only; article holds text.
+    # GUARD: a parenthetical is only a paragraph marker if it's a PLAUSIBLE paragraph number
+    # (1..20). Years and oversized numbers are cross-references ("Berne (1971)", "(1994)") —
+    # NOT pinpoints. Minting provisions from those is fabricated citation (prime rule 1).
     for pm in re.finditer(r"(?:^|\s)(?:\((\d+)\)|(\d+)\.\s)", body or ""):
-        n = pm.group(1) or pm.group(2)
+        n = int(pm.group(1) or pm.group(2))
+        if not (1 <= n <= 20):
+            continue
         pcite = f"{cite}({n})"
         if pcite in {r["citation"] for r in rs.records}:
             continue
-        rs.add(parent_local=aid, kind="paragraph", label=f"({n})", sort_int=int(n),
+        rs.add(parent_local=aid, kind="paragraph", label=f"({n})", sort_int=n,
                role="enacting", citation=pcite, content=None)
 
 

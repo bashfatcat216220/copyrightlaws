@@ -126,7 +126,10 @@ def parse(xml_path: str) -> tuple[str, list[dict]]:
                      _txt(_child(c, "Title")), in_sched, sched_no)
             elif name == "P1":
                 sib += 1
-                num = _txt(_child(c, "Pnumber"))
+                # normalize the section number — some CDPA point-in-time XML carries a trailing
+                # dot on Pnumber ("205B."), which forked s.205B into a duplicate provision and
+                # masked its change-monitor alert. Strip it so the citation is stable across snapshots.
+                num = (_txt(_child(c, "Pnumber")) or "").rstrip(". ") or None
                 si, su = ordinal(num, sib)
                 if in_sched:
                     # container_cite is the Schedule (or Schedule+Part) — keeps paragraph
@@ -143,7 +146,7 @@ def parse(xml_path: str) -> tuple[str, list[dict]]:
                 walk(c, lid, container_cite, cite, [], None, in_sched, sched_no)
             elif name in PLEVEL:
                 sib += 1
-                num = _txt(_child(c, "Pnumber"))
+                num = (_txt(_child(c, "Pnumber")) or "").rstrip(". ") or None
                 si, su = ordinal(num, sib)
                 newsub = subpath + [num]
                 cite = (sec_cite or "CDPA 1988 s.") + "".join(f"({x})" for x in newsub)

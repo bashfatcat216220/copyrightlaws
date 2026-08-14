@@ -2,7 +2,7 @@
 
 > Status comes from THIS file, read fresh. Do not answer "where are we" from memory.
 
-_Last updated: 2026-08-13._
+_Last updated: 2026-08-14._
 
 ## Where we are (one breath)
 
@@ -16,8 +16,12 @@ marker-paragraph body, a small italic sources note on the home page, and per-lis
 section-number columns. **Change-monitoring is live AND auto-refreshing** — `/alerts` lists 90
 real UK CDPA amendments (2015→now, incl. the Brexit "EEA State"→"United Kingdom" changes) with
 reader redlines, and `src/monitor/refresh.py` re-pulls UK+US on a daily cron → re-ingests →
-fires new alerts. Next depth items: Cases data, per-subsection text, deep-linkable URLs, matrix
-(see "Remaining work"). corpus.db migrated + loaded; branch pushed.
+fires new alerts (**91** after the s.205B merge below). **Cases data is live** — the reader's
+Cases tab shows real US opinions citing a section (CourtListener, treatment='cited'). A
+**4-agent validity audit (fable, read-only) ran 2026-08-14** across US/EU/INT/UK; the corpus is
+substantively grounded (verbatim text, provenance-stamped) and the 3 concrete defects it found
+are **fixed** (see "Audit & remediation"). Next depth items: per-subsection text, deep-linkable
+URLs, matrix (see "Remaining work"). corpus.db migrated + loaded; branch pushed.
 
 - **Corpus (live in `corpus.db`):** **18 instruments · 12,857 provisions · 4,516 versions**,
   every version SHA-256'd with `source_url` + `retrieved_at`. **Phase 2 breadth: Tier-1 (4) +
@@ -130,6 +134,48 @@ pulls these live is not yet built — that's the automation step for change-moni
   long section's rail should expand to subsections is unspecified by the mockup (a design Q).
 - **Treaty/article rail group label** — ungrouped provisions (Berne articles) render under a
   generic header; could label per instrument type.
+- **`status` is coarse (US audit note)** — repealed/renumbered US sections (e.g. 17 U.S.C. §116A
+  "[Renumbered]", §601 "[Repealed]") and eCFR "[Reserved]" 37 C.F.R. sections carry
+  `status='in_force'`. The *text* is honest (the official bracket-note / NULL), only the status
+  metadatum is imprecise. Cheap fix: set `status='repealed'|'renumbered'|'reserved'` on those rows.
+- **`point_in_time` NULL on US versions** — 17 U.S.C. / 37 C.F.R. currency is implied by the
+  release-point / eCFR-date in `source_url`, not stamped in `point_in_time` (UK versions do carry it).
+
+## Audit & remediation (2026-08-14, 4 fable read-only agents)
+
+Four independent `fable` agents audited law validity against official sources, read-only
+(one each: **US, EU, INT, UK**). Overall: the corpus is **substantively trustworthy** — text is
+verbatim from fetched artifacts, provenance-stamped (`source_url` + `retrieved_at`), and honest
+where NULL. **US verdict: VALID / HIGH confidence** (17 U.S.C. — 15 chapters/153 sections, and
+37 C.F.R. Chapter II — both verified against live OLRC release-point 119-102 and the eCFR API;
+no fabrication anywhere checked). EU/INT/UK were grounded too (INT even reproduces an OJ typo
+verbatim) but surfaced **3 concrete defects — all now FIXED on both `corpus.db` + `corpus-demo.db`:**
+
+1. **TRIPS fabricated pinpoints — FIXED (prime-rule-1 violation).** The treaty paragraph parser
+   read cross-references in the body ("Berne Convention (1971)", "(1994)") as paragraph markers,
+   minting **29 fake** `TRIPS Art. N(YYYY)`/oversized-parenthetical provisions. They carried **0
+   versions** (structure-only) → deleted. Root-cause patched in `ingest_treaty._add_article`: a
+   parenthetical is a pinpoint ONLY if it's a plausible paragraph number (1–20); years/oversized
+   numbers are skipped. TRIPS paragraphs 175 → **146** (all legitimate). Scratch re-ingest of all
+   treaties confirms **0** fakes regenerate.
+2. **Treaty footer-JS contamination — FIXED.** Scraped page-footer `<script>` (a `var browser…
+   window.print()` blob) had leaked into the body of the LAST article of 4 treaty versions
+   (WIPO/WTO HTML segments run to end-of-page). Stripped from stored versions; `ingest_treaty._clean`
+   now removes `<script>`/`<style>` blocks BEFORE tag-stripping so it can't recur. Scratch check: 0.
+3. **UK CDPA s.205B duplicate — FIXED (+ masked alert recovered).** One point-in-time CLML
+   snapshot carried a trailing dot on the section number (`Pnumber` = "205B."), so the reload
+   forked s.205B into a parallel `s. 205B.` subtree instead of versioning the existing one — which
+   **masked its change-monitor alert** (the current 2026-01-01 text landed on the dup; the canonical
+   provision stayed frozen at the stale 2015 snapshot, so no diff ever fired). Merge: moved the
+   current text onto canonical `CDPA 1988 s. 205B`, deleted the 13-row dotted subtree, re-ran the
+   monitor → **91st alert** fired (Schedule 2 para 19 reference removed). `ingest_clml` now strips
+   trailing dots from `Pnumber` (both P1 and sub-levels) so citations are stable across snapshots.
+
+**Deferred (needs Bing's go-ahead — more involved):**
+4. **EU consolidation currency.** Audit flagged that a few EU directives (Term / InfoSoc /
+   Database) may be pointed at an older EUR-Lex consolidation than the latest. Re-pointing means
+   re-fetching CELLAR consolidations + re-ingesting; not a data-corruption issue (text is authentic
+   as-of its stated version), so parked until confirmed.
 
 ## Remaining work — finish in this order
 
@@ -166,8 +212,12 @@ pulls these live is not yet built — that's the automation step for change-moni
       in place or insert) — applied in `_common` AND the pre-`_common` ingests (`ingest_uslm`,
       `ingest_clml`). REMAINING: add per-source fetchers for the signed-URL / PDF / national-portal
       sources (only UK + US are auto-refreshed today; the rest need a fetcher each).
-   b. **Cases tab → real data** — populate `case_treatment` (per-provision decisions,
-      followed/distinguished/criticized; rust = adverse). Lights up the reader's 2nd tab.
+   b. **Cases tab → real data — DONE (2026-08-14).** `src/store/ingest_cases.py` queries the
+      CourtListener v4 API for opinions CITING each of 22 most-litigated 17 U.S.C. sections and
+      writes `case_treatment` rows (treatment='cited' — a FACT; editorial followed/distinguished
+      is NOT asserted, we can't source it freely). Each cited case is its own `type='case'`
+      instrument with provenance. Reader Cases tab renders them; case instruments are excluded
+      from all corpus counts/rails. (Live: e.g. §107 shows 5 citing opinions.)
    c. **Per-subsection text storage** — replace the reader's display-heuristic paragraph split
       (`_format_body`, reconstructs (a)/(1) paragraphs from a flat blob) with real
       per-subsection versions; gives clean, robust pinpoint text.
