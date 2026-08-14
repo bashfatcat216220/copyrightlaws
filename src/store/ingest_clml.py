@@ -76,6 +76,7 @@ def parse(xml_path: str) -> tuple[str, list[dict]]:
     root = ET.parse(xml_path).getroot()
     records: list[dict] = []
     seen: dict[str, int] = {}          # deterministic citation-uniqueness guard
+    sched_para_seq: dict[str, int] = {}  # per-schedule positional counter for unnumbered <P> paras
 
     # Repealed CDPA sections carry an empty <Text/> (or a row-of-dots Title) and the repeal is
     # in a <Commentary> keyed by the Pnumber's <CommentaryRef>. Map id → notice so a repealed
@@ -135,6 +136,31 @@ def parse(xml_path: str) -> tuple[str, list[dict]]:
                           sort_int=si, sort_suffix=su, role="schedule", citation=cite, content=None)
                 walk(c, lid, cite, None, [], None, True, num)
             elif name == "P1group":
+                # Some schedule paragraphs carry NO <Pnumber> — the source lists them as bare
+                # <P> text inside a <P1group> (CDPA Schedule 5A, the s.296ZE permitted-acts list:
+                # "section 29 (research and private study)", …). The numbered P1/PLEVEL handling
+                # keys on <Pnumber>, so these unnumbered groups would be dropped. Capture each such
+                # group as ONE positional schedule paragraph (source has no numbers → doc-order
+                # label "para. <n>"). A group with any numbered <P1> child is left to normal walk.
+                has_numbered = any(local(d.tag) in ("P1", "P1group") for d in c.iter()
+                                   if d is not c)
+                bare_ps = [d for d in c.iter() if local(d.tag) == "P"]
+                if in_sched and not has_numbered and bare_ps:
+                    text = " ".join(t for t in (_operative_text(p) for p in bare_ps) if t).strip()
+                    if text:
+                        sib += 1
+                        key = str(sched_no)
+                        sched_para_seq[key] = sched_para_seq.get(key, 0) + 1
+                        pn = sched_para_seq[key]
+                        # Positional citation is schedule-scoped (numbering runs across the whole
+                        # schedule in document order, spanning its Parts) since the source gives
+                        # no per-paragraph numbers: "CDPA 1988 Schedule 5A para. <n>".
+                        base = f"CDPA 1988 Schedule {sched_no}"
+                        cite = f"{base} para. {pn}"
+                        add(parent_local=parent_local, kind="schedule_para",
+                            label=f"para. {pn}", heading=None, sort_int=pn, sort_suffix="",
+                            role="schedule", citation=cite, content=text, status="in_force")
+                    continue
                 walk(c, parent_local, container_cite, sec_cite, subpath,
                      _txt(_child(c, "Title")), in_sched, sched_no)
             elif name == "P1":

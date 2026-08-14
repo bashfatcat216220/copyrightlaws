@@ -43,8 +43,14 @@ _TITLE = re.compile(r"^Title\s+([IVXLC]+)$")
 _CHAPTER = re.compile(r"^Chapter\s+([IVXLC]+)$|^Sole Chapter$")
 # An article opens a line: "Art. 148. <text...>" — the number then a period.
 _ARTICLE = re.compile(r"^Art\.\s*(\d+)\.\s*(.*)$")
-# End-of-body marker: the closing "Transitional Provisions" block (kept out of the article tree).
+# The closing "Transitional Provisions" block header (after Art. 238). Its clauses carry the
+# repeal of the prior 1956/1963 law, so they are ingested as their own provisions (not dropped).
 _TRANSITIONAL = re.compile(r"^Transitional Provisions$")
+# Each transitory clause opens with an ORDINAL WORD then a period: "First. ...", "Second. ...".
+# The source has no Arabic numbers here — the ordinal word IS the label (grounded verbatim).
+_TRANSITORY_WORDS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
+                     "Eighth", "Ninth", "Tenth", "Eleventh", "Twelfth"]
+_TRANSITORY = re.compile(r"^(" + "|".join(_TRANSITORY_WORDS) + r")\.\s*(.*)$")
 
 
 def _lines(path: str) -> list[str]:
@@ -63,6 +69,37 @@ def _body_start(lines: list[str]) -> int:
         if re.match(r"^Art\.\s*1\.", ln.strip()):
             return i
     return 0
+
+
+def _parse_transitory(rs: RecordSet, body: list[str], start: int, n: int) -> None:
+    """Ingest the closing "Transitional Provisions" clauses (First..Ninth) after Art. 238 as
+    their own provisions. One clause opens with an ordinal word + period and runs (including any
+    unlabelled continuation paragraph) until the next ordinal word. Grounded verbatim — the
+    Second clause carries the repeal of the 1956/1963 Federal Law on Copyright."""
+    container = rs.add(parent_local=None, kind="part", label="Transitional Provisions",
+                       heading="Transitional Provisions",
+                       sort_int=10_000, sort_suffix="", role="enacting",
+                       citation="LFDA (Mexico) Transitional Provisions")
+    seq = 0
+    j = start
+    while j < n:
+        s = body[j].strip()
+        m = _TRANSITORY.match(s)
+        if not m:
+            j += 1
+            continue
+        word, first = m.group(1), m.group(2).strip()
+        seq += 1
+        clause_lines: list[str] = [first] if first else []
+        k = j + 1
+        while k < n and not _TRANSITORY.match(body[k].strip()):
+            clause_lines.append(body[k])
+            k += 1
+        content = "\n".join(clause_lines).strip() or None
+        rs.add(parent_local=container, kind="article", label=f"Transitional Article {word}",
+               heading=None, sort_int=seq, sort_suffix="", role="enacting",
+               citation=f"LFDA (Mexico) Transitional Article {word}", content=content)
+        j = k
 
 
 def parse(path: str) -> RecordSet:
@@ -89,7 +126,8 @@ def parse(path: str) -> RecordSet:
     while i < n:
         line = body[i].strip()
 
-        if _TRANSITIONAL.match(line):     # closing transitional block — not part of the article tree
+        if _TRANSITIONAL.match(line):     # closing transitional block → ingest its clauses as provisions
+            _parse_transitory(rs, body, i + 1, n)
             break
 
         tm = _TITLE.match(line)

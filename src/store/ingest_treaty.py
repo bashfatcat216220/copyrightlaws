@@ -114,6 +114,33 @@ def _clean(frag: str) -> str:
     return re.sub(r"\s+", " ", htmlmod.unescape(frag)).strip()
 
 
+# ── shared: add an Agreed Statement as its own interpretive provision ─────────
+# Agreed Statements are adopted interpretive text of the Diplomatic Conference, NOT enacting
+# articles. They are ingested VERBATIM from the source artifact and tagged `role='recital'`
+# ("interpretive; addressable + searchable, NEVER counted/diffed" per the schema) so they read
+# as agreed statements, not enacting text — the schema's kind/role vocabulary has no dedicated
+# 'note'/'interpretive', and 'recital' carries exactly these semantics. sort_int is offset past
+# the articles (base 10000 + endnote index) so they file after the treaty body. The citation
+# carries the article(s) the statement concerns; when two endnotes concern the SAME article the
+# RecordSet's `#N` disambiguator keeps them distinct (a note tag, never a fabricated pinpoint).
+_AS_SORT_BASE = 10000
+
+
+def _add_agreed_statement(rs: RecordSet, cite_prefix: str, idx: int, art_ref: str,
+                          text: str) -> None:
+    art_ref = re.sub(r"\s+", " ", art_ref).strip().rstrip(":").strip()
+    plural = "s" if _multi_art(art_ref) else ""
+    label = f"Agreed Statement concerning Article{plural} {art_ref}"
+    cite = f"{cite_prefix} Agreed Statement concerning Article{plural} {art_ref}"
+    rs.add(kind="recital", label=label, heading=None, sort_int=_AS_SORT_BASE + idx,
+           sort_suffix="", role="recital", citation=cite, content=text or None)
+
+
+def _multi_art(art_ref: str) -> bool:
+    """True when the reference names more than one article (e.g. '6 and 7', '2(e), 8, 9')."""
+    return bool(re.search(r"\band\b|,", art_ref))
+
+
 # ── shared: add an article + its addressable numbered paragraphs ─────────────
 def _add_article(rs: RecordSet, cite_prefix: str, i: int, token: str, heading: str | None,
                  body: str) -> None:
@@ -155,24 +182,54 @@ _HTML_NOTE = re.compile(
     r"<(?:strong|b)>(.*?)</(?:strong|b)>)", re.S | re.I)
 
 
+# Agreed Statements in the WIPO HTML sit after the LAST article, below a horizontal rule
+# (`<hr align=left …>`), as footnote paragraphs:
+#   <p><sup><a name="_ftnN">N</a></sup> <strong|b>Agreed statement concerning Article X:</strong|b> body</p>
+_HTML_AS_HR = re.compile(r"<hr\b[^>]*>", re.I)
+_HTML_AS_FN = re.compile(
+    r"<p>\s*(?:<sup>)?\s*<a\s+[^>]*name=\"_ftn(\d+)\"[^>]*>.*?</a>\s*(?:</sup>)?\s*"
+    r"<(?:strong|b)>\s*Agreed\s+statement\s+concerning\s+Articles?\s+(.*?)\s*:\s*</(?:strong|b)>"
+    r"(.*?)</p>", re.S | re.I)
+
+
 def _parse_wipo_html(path: str, cite_prefix: str) -> RecordSet:
     html = open(path, encoding="utf-8", errors="replace").read()
-    heads = list(_HTML_HEAD.finditer(html))
+    # BOUND the article run at the Agreed-Statements horizontal rule so the last article does
+    # not swallow the endnote block (Beijing Art. 30 / Marrakesh Art. 22 dumped ~11–13 agreed
+    # statements). Everything after the rule is parsed separately as interpretive notes.
+    hr = _HTML_AS_HR.search(html)
+    body_html = html[:hr.start()] if hr else html
+    heads = list(_HTML_HEAD.finditer(body_html))
     rs = RecordSet()
     for i, m in enumerate(heads):
         raw_num = m.group(2)
         suffix = (m.group(3) or m.group(4) or "")
         token = f"{raw_num}{suffix}"
-        end = heads[i + 1].start() if i + 1 < len(heads) else min(len(html), m.end() + 12000)
-        seg = html[m.end():end]
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(body_html)
+        seg = body_html[m.end():end]
         heading, body_start = None, m.end()
         nm = _HTML_NOTE.match(seg)
         if nm:
             heading = _clean(nm.group(1) or nm.group(2) or "") or None
             body_start = m.end() + nm.end()
-        body = _clean(html[body_start:end])
+        body = _clean(body_html[body_start:end])
         _add_article(rs, cite_prefix, i, token, heading, body)
+    if hr:
+        _parse_html_agreed_statements(rs, cite_prefix, html[hr.end():])
     return rs
+
+
+def _parse_html_agreed_statements(rs: RecordSet, cite_prefix: str, tail: str) -> None:
+    """Parse the footnote-paragraph Agreed Statements after the horizontal rule into their own
+    interpretive provisions, verbatim. The footnote number (_ftnN) is the endnote index."""
+    for m in _HTML_AS_FN.finditer(tail):
+        idx = int(m.group(1))
+        art_ref = _clean(m.group(2))
+        body = _clean(m.group(3))
+        # store the full statement verbatim, prefixed with its "Agreed statement concerning…" head
+        multi = _multi_art(art_ref)
+        text = (f"Agreed statement concerning Article{'s' if multi else ''} {art_ref}: {body}").strip()
+        _add_agreed_statement(rs, cite_prefix, idx, art_ref, text)
 
 
 # ── mode: WIPO PDF → pdftotext text (WCT / WPPT) ─────────────────────────────
@@ -180,10 +237,19 @@ _PDF_HEAD = re.compile(r"^[ \t\x0c]*Article\s+(\d+)([A-Za-z]*)\s*$")
 _PDF_NOISE = re.compile(r"^\s*(page\s+\d+/\d+|\x0c)\s*$", re.I)
 
 
+# An endnote in the PDF is: a lone number line (the endnote marker, e.g. "         1"),
+# then a body line beginning "Agreed statement concerning Article(s) <ref>: <text>". The
+# marker numbers run 1..N sequentially.
+_PDF_AS_MARK = re.compile(r"^\s*(\d+)\s*$")
+_PDF_AS_HEAD = re.compile(
+    r"^\s*Agreed statement concerning Articles?\s+(.*?):\s*(.*)$", re.I)
+
+
 def _parse_wipo_pdf(path: str, cite_prefix: str) -> RecordSet:
     raw = open(path, encoding="utf-8", errors="replace").read()
     lines = raw.split("\n")
-    # locate article heading lines; stop the whole treaty at the "Note: The agreed statements" line
+    # locate article heading lines; stop the ARTICLE run at "Note: The agreed statements" — the
+    # Agreed Statements that follow are ingested separately as their own interpretive provisions.
     stop = len(lines)
     for j, ln in enumerate(lines):
         if re.match(r"\s*Note:\s*The agreed statements", ln):
@@ -212,7 +278,46 @@ def _parse_wipo_pdf(path: str, cite_prefix: str) -> RecordSet:
         body_lines = [ln.replace("\x0c", "") for ln in block[rest_start:]]
         body = re.sub(r"\s+", " ", " ".join(body_lines)).strip()
         _add_article(rs, cite_prefix, k, token, heading, body)
+    _parse_pdf_agreed_statements(rs, cite_prefix, lines, stop)
     return rs
+
+
+def _parse_pdf_agreed_statements(rs: RecordSet, cite_prefix: str, lines: list[str],
+                                 start: int) -> None:
+    """After the "Note: The agreed statements…" boundary the PDF lists the endnotes. Each is a
+    lone marker number (1,2,3…) then "Agreed statement concerning Article(s) <ref>: <body>",
+    the body flowing across lines until the NEXT marker+"Agreed statement" pair. We slice on the
+    STRICTLY SEQUENTIAL marker run so a stray page number / digit never starts a fake note."""
+    # gather (line_index, marker_number) for lone-number lines that are immediately followed
+    # (skipping blanks/page-noise) by an "Agreed statement concerning" line.
+    marks: list[tuple[int, int]] = []
+    for j in range(start, len(lines)):
+        mm = _PDF_AS_MARK.match(lines[j])
+        if not mm:
+            continue
+        k = j + 1
+        while k < len(lines) and (not lines[k].strip() or _PDF_NOISE.match(lines[k])):
+            k += 1
+        if k < len(lines) and _PDF_AS_HEAD.match(lines[k].replace("\x0c", "")):
+            marks.append((j, int(mm.group(1))))
+    # keep only the strictly sequential 1,2,3… run
+    seq: list[tuple[int, int]] = []
+    expected = 1
+    for j, n in marks:
+        if n == expected:
+            seq.append((j, n))
+            expected += 1
+    for idx, (j, n) in enumerate(seq):
+        end = seq[idx + 1][0] if idx + 1 < len(seq) else len(lines)
+        block = [ln.replace("\x0c", "") for ln in lines[j + 1:end]
+                 if not _PDF_NOISE.match(ln) and ln.strip() != "\x0c"]
+        text = re.sub(r"\s+", " ", " ".join(block)).strip()
+        hm = _PDF_AS_HEAD.match(text)
+        if not hm:
+            continue
+        art_ref, body = hm.group(1), hm.group(2)
+        # store the FULL statement verbatim ("Agreed statement concerning Article N: <body>")
+        _add_agreed_statement(rs, cite_prefix, n, art_ref, text)
 
 
 # ── mode: WTO-hosted HTML (TRIPS) ────────────────────────────────────────────
@@ -242,7 +347,38 @@ def _parse_wto_html(path: str, cite_prefix: str) -> RecordSet:
         heading = _clean(hm.group(1)) if hm else None
         body = _clean(seg[hm.end():] if hm else seg)
         _add_article(rs, cite_prefix, i, token, heading, body)
+    _parse_trips_annex(rs, cite_prefix, html)
     return rs
+
+
+def _parse_trips_annex(rs: RecordSet, cite_prefix: str, html: str) -> None:
+    """Ingest the TRIPS Annex (and its Appendix) as their OWN provisions, verbatim. The Annex
+    runs from "ANNEX TO THE TRIPS AGREEMENT" to "APPENDIX TO THE ANNEX"; the Appendix from there
+    to the "<h4>Notes:</h4>" block (the treaty-wide footnotes, which are NOT annex content and are
+    left out). Body numbered paras (1.,2.…) and inline footnote markers (1),(2) are kept verbatim
+    but NOT minted as pinpoint children — these are 'annex' text, not addressable sub-paragraphs."""
+    # Anchor on the real annex/appendix HEADINGS (`<h1 class="web_h2">ANNEX…</h1>`), NOT the
+    # earlier table-of-contents menu links to the same words.
+    a = re.search(r"<h1[^>]*>\s*ANNEX\s+TO\s+THE\s+TRIPS\s+AGREEMENT\s*</h1>", html, re.I)
+    if not a:
+        return
+    ap = re.search(r"<h1[^>]*>\s*APPENDIX\s+TO\s+THE\s+ANNEX", html[a.end():], re.I)
+    notes = re.search(r"<h4>\s*Notes:", html[a.end():], re.I)
+    ap_start = a.end() + ap.start() if ap else None
+    notes_start = a.end() + notes.start() if notes else len(html)
+    annex_end = ap_start if ap_start is not None else notes_start
+    annex_body = _clean(html[a.start():annex_end])
+    if annex_body:
+        rs.add(kind="schedule", label="Annex", heading="Annex to the TRIPS Agreement",
+               sort_int=_AS_SORT_BASE, sort_suffix="", role="schedule",
+               citation=f"{cite_prefix} Annex", content=annex_body)
+    if ap_start is not None:
+        appx_body = _clean(html[ap_start:notes_start])
+        if appx_body:
+            rs.add(kind="schedule", label="Appendix to the Annex",
+                   heading="Appendix to the Annex to the TRIPS Agreement",
+                   sort_int=_AS_SORT_BASE + 1, sort_suffix="", role="schedule",
+                   citation=f"{cite_prefix} Annex Appendix", content=appx_body)
 
 
 # ── public parse() ───────────────────────────────────────────────────────────

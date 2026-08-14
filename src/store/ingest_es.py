@@ -15,12 +15,23 @@ Consolidated as approved by Royal Legislative Decree 1/1996 and amended up to RD
 
 Structure (from the PDF, converted via `pdftotext -layout`):
     BOOK → TITLE → CHAPTER → SECTION → Article N
+    ... then BACK MATTER after the last article (Art. 167):
+    Additional Provisions (First–Fifth) · Transitional Provisions (First–Twentieth) ·
+    Sole Repealing Provision · Sole Final Provision.
 Articles are the RAIL unit (kind='article'; they get the operative content + version + FTS).
 Containers → part (Book/Title), chapter (Chapter), subchapter (Section). Article numbers are
 mostly plain integers with the odd bis/ter (31 bis, 40 bis, 40 ter); glued footnote digits
 (pdftotext artifacts like "Article 2410." = Art. 24 + footnote 10) are stripped off the
 number. `_common.ordinal` handles the suffixes (bis/ter fall to document order — fine).
 Citations: "TRLPI Art. 32". Container citations: "TRLPI Book I", "TRLPI Art. 31 bis", etc.
+
+Back matter (F-ES2 fix): each Additional/Transitional/Repealing/Final Provision is its OWN
+addressable provision (kind='article', grounded verbatim from the source), grouped under a
+container 'part' per family. Art. 167's body is cut at the FIRST back-matter heading so it no
+longer swallows the ~15k-char tail. Headings are ordinal-word based ("First Additional
+Provision.", "Twentieth Transitional Provision76.", "Sole Repealing Provision.") and may carry
+a glued footnote number + a wrapped title line. Citations: "TRLPI Additional Provision 1",
+"TRLPI Transitional Provision 12", "TRLPI Repeal Provision", "TRLPI Final Provision".
 
 Parse guards (pdftotext realities):
   * A REAL article header is preceded by a BLANK line; mid-sentence cross-references that
@@ -63,6 +74,35 @@ _CONTAINER = re.compile(
 # footnote number GLUED to it (pdftotext artifact: "Article 2410." = Art. 24 + footnote 10);
 # `_split_article_num` peels that off using document-order monotonicity.
 _ARTICLE = re.compile(r"^Article\s+(\d+)(\s+bis|\s+ter|\s+quater)?\.\s*(.*)$")
+
+# Back matter (after the last article). Each provision heading is flush-left and opens with an
+# ordinal WORD ("First".."Twentieth", or "Sole") + a family word (Additional/Transitional/
+# Repealing/Final) + "Provision". It may carry a glued footnote number and an inline/wrapped
+# title. group(1)=ordinal word, group(2)=family, group(3)=inline title remainder.
+_BACKMATTER = re.compile(
+    r"^(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Eleventh|Twelfth|"
+    r"Thirteenth|Fourteenth|Fifteenth|Sixteenth|Seventeenth|Eighteenth|Nineteenth|Twentieth|"
+    r"Sole)\s+(Additional|Transitional|Repealing|Final)\s+Provision\d*\.?\s*(.*)$")
+
+_ORDINAL_WORD = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7,
+    "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11, "twelfth": 12, "thirteenth": 13,
+    "fourteenth": 14, "fifteenth": 15, "sixteenth": 16, "seventeenth": 17, "eighteenth": 18,
+    "nineteenth": 19, "twentieth": 20, "sole": 1,
+}
+
+# Back-matter families → (container part label, container citation, per-provision citation stem,
+# per-provision label stem). The Repealing/Final families are single "Sole" provisions.
+_BM_FAMILY = {
+    "Additional": ("Additional Provisions", "TRLPI Additional Provisions",
+                   "TRLPI Additional Provision", "Additional Provision"),
+    "Transitional": ("Transitional Provisions", "TRLPI Transitional Provisions",
+                     "TRLPI Transitional Provision", "Transitional Provision"),
+    "Repealing": ("Repealing and Final Provisions", "TRLPI Repealing and Final Provisions",
+                  "TRLPI Repeal Provision", "Repeal Provision"),
+    "Final": ("Repealing and Final Provisions", "TRLPI Repealing and Final Provisions",
+              "TRLPI Final Provision", "Final Provision"),
+}
 
 
 def _split_article_num(digits: str, last_num: int) -> int:
@@ -114,6 +154,9 @@ def parse(path: str) -> RecordSet:
     rs = RecordSet()
     # open container ids by slot; a shallower container clears the deeper ones below it
     container = {"book": None, "title": None, "chapter": None, "section": None}
+    # back-matter containers, opened lazily & deduped by container citation (Repealing + Final
+    # share one "Repealing and Final Provisions" container).
+    backmatter: dict[str, int] = {}
     doc_i = 0
     n = len(lines)
     started = False        # only start emitting once BOOK I (the operative body) is reached
@@ -138,9 +181,43 @@ def parse(path: str) -> RecordSet:
         if j >= n:
             return None
         cand = lines[j].strip()
-        if _CONTAINER.match(lines[j]) or _ARTICLE.match(cand):
+        if _CONTAINER.match(lines[j]) or _ARTICLE.match(cand) or _BACKMATTER.match(cand):
             return None
         return _strip_fn(cand)
+
+    def is_body_stop(idx: int) -> bool:
+        """True when line `idx` opens a new addressable unit — a container, a real article
+        header, or a back-matter provision heading — where a running body must stop."""
+        raw2 = lines[idx]
+        if _CONTAINER.match(raw2):
+            return True
+        stripped = raw2.strip()
+        if _ARTICLE.match(raw2) and blank_before(idx):
+            return True
+        if _BACKMATTER.match(stripped) and blank_before(idx):
+            return True
+        return False
+
+    def collect_body(start: int) -> tuple[list[str], int]:
+        """Gather a provision's body from line `start` until the next unit boundary, dropping
+        footnote-apparatus noise (lone footnote numbers + their indented footnote text) and
+        standalone footnote-definition lines. Returns (body_lines, index_after_body)."""
+        body: list[str] = []
+        j = start
+        while j < n:
+            if is_body_stop(j):
+                break
+            nxt_raw = lines[j]
+            nxt = nxt_raw.strip()
+            if _FN_LINE.match(nxt_raw):            # a footnote NUMBER — skip it AND its indented
+                j += 1                             # footnote-TEXT line(s) (operative text is flush-left,
+                while j < n and lines[j][:1].isspace() and lines[j].strip():   # so leading-space = footnote)
+                    j += 1
+                continue
+            if nxt and not _FN_DEF.match(nxt):     # skip standalone footnote-definition lines
+                body.append(nxt)
+            j += 1
+        return body, j
 
     for i in range(n):
         raw = lines[i]
@@ -192,25 +269,9 @@ def parse(path: str) -> RecordSet:
             suffix = (am.group(2) or "").strip()  # 'bis' / 'ter' / ''
             art_key = f"{num} {suffix}".strip()   # "31 bis" / "24"
             title = _strip_fn(am.group(3))
-            # body = lines until the next header/container, dropping footnote-apparatus noise
-            body: list[str] = []
-            j = i + 1
-            while j < n:
-                nxt_raw = lines[j]
-                nxt = nxt_raw.strip()
-                if _CONTAINER.match(nxt_raw):
-                    break
-                am2 = _ARTICLE.match(nxt_raw)
-                if am2 and blank_before(j):        # next real article header ⇒ stop
-                    break
-                if _FN_LINE.match(nxt_raw):        # a footnote NUMBER — skip it AND its indented
-                    j += 1                         # footnote-TEXT line(s) (operative text is flush-left,
-                    while j < n and lines[j][:1].isspace() and lines[j].strip():   # so leading-space = footnote)
-                        j += 1
-                    continue
-                if nxt and not _FN_DEF.match(nxt):  # skip standalone footnote-definition lines
-                    body.append(nxt)
-                j += 1
+            # body = lines until the next unit boundary (incl. the FIRST back-matter heading, so
+            # Art. 167 stops at "First Additional Provision." instead of swallowing the tail)
+            body, _ = collect_body(i + 1)
             content = "\n".join(body).strip() or None
             doc_i += 1
             # ordinal needs the suffix UNSPACED ("31bis") — the spaced form "31 bis" fails the
@@ -219,6 +280,44 @@ def parse(path: str) -> RecordSet:
             rs.add(parent_local=parent_for_article(), kind="article",
                    label=f"Article {art_key}", heading=title, sort_int=si, sort_suffix=su,
                    citation=f"TRLPI Art. {art_key}", content=content)
+            continue
+
+        bm = _BACKMATTER.match(line)
+        if bm and blank_before(i):                # a back-matter provision heading
+            word, family, inline = bm.group(1), bm.group(2), bm.group(3)
+            num = _ORDINAL_WORD[word.lower()]
+            part_label, part_cit, prov_cit_stem, prov_label_stem = _BM_FAMILY[family]
+            # open (once, deduped by citation) the family container, in first-seen order
+            if part_cit not in backmatter:
+                doc_i += 1
+                backmatter[part_cit] = rs.add(
+                    parent_local=None, kind="part", label=part_label,
+                    heading=part_label, sort_int=doc_i, sort_suffix="",
+                    citation=part_cit)
+            container_lid = backmatter[part_cit]
+            # heading = inline title + any wrapped continuation lines. The source separates the
+            # title from the body with a BLANK line, so title-wrap = the non-blank lines that
+            # immediately follow the heading (no intervening blank). Body starts after that blank.
+            head_parts = [inline.strip()] if inline and inline.strip() else []
+            b = i + 1
+            while b < n and lines[b].strip() and not is_body_stop(b) \
+                    and not _FN_LINE.match(lines[b]):
+                head_parts.append(lines[b].strip())
+                b += 1
+            body, _ = collect_body(b)
+            heading = _strip_fn(" ".join(head_parts).strip()) if head_parts else None
+            content = "\n".join(body).strip() or None
+            doc_i += 1
+            # Sole Repealing / Sole Final are single provisions (no numeric suffix in citation).
+            if family in ("Repealing", "Final"):
+                citation, label = prov_cit_stem, prov_label_stem
+            else:
+                citation = f"{prov_cit_stem} {num}"
+                label = f"{prov_label_stem} {num}"
+            rs.add(parent_local=container_lid, kind="article", label=label,
+                   heading=heading, sort_int=doc_i, sort_suffix="",
+                   citation=citation, content=content)
+            continue
     return rs
 
 
