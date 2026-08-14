@@ -83,7 +83,10 @@
     <div class="secgrid" style="--numw: {{ ci.numw }}ch;">
       {% for s in ci.grid %}
         <a class="secitem" href="/instrument/{{ inst.id }}?sec={{ s.id }}">
-          <span class="sn">{{ s.label }}</span><span class="st">{{ s.heading or '' }}</span>
+          <span class="sn">{{ s.label }}</span>
+          {% if s.heading %}<span class="st">{{ s.heading }}</span>
+          {% elif s.incipit %}<span class="st incipit">{{ s.incipit }}</span>
+          {% else %}<span class="st"></span>{% endif %}
         </a>
       {% endfor %}
     </div>
@@ -100,7 +103,10 @@
       <div class="secrail-chap">{{ grp.chap_label or 'Provisions' }}</div>
       {% for s in grp.sections %}
         <a class="secrow {{ 'active' if s.active }}" href="/instrument/{{ inst.id }}?sec={{ s.id }}">
-          <span class="secnum">{{ s.label }}</span><span class="secttl">{{ s.heading or '—' }}</span>
+          <span class="secnum">{{ s.label }}</span>
+          {% if s.heading %}<span class="secttl">{{ s.heading }}</span>
+          {% elif s.incipit %}<span class="secttl incipit">{{ s.incipit }}</span>
+          {% else %}<span class="secttl">—</span>{% endif %}
         </a>
       {% endfor %}
     {% endfor %}

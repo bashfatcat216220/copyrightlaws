@@ -138,6 +138,7 @@ def _section_reader(conn, iid, sec):
     for r in rows:
         if r["kind"] == "recital":
             r["chap_label"] = "Recitals"
+    _fill_incipits(conn, rows)                               # preview text for heading-less rails
     sel_id = sec if sec is not None else rows[0]["id"]
     # group into the left rail by chapter, marking the active section
     rail, cur = [], None
@@ -217,6 +218,34 @@ def _format_body(content, heading=None):
     return [p for p in paras if p["text"]]
 
 
+def _incipit(content, limit=90):
+    """A short text preview for provisions that carry NO source heading (e.g. Brazilian /
+    French articles are numbered but not titled). Shown in the index/rail so the list isn't a
+    column of bare numbers — it is the provision's own opening words, clearly a preview, never
+    an invented rubric (prime rule 1: we don't originate titles the source doesn't have)."""
+    if not content:
+        return ""
+    txt = re.sub(r"\s+", " ", content.strip())
+    txt = re.sub(r"^\W*\d{1,3}\W+", "", txt) if False else txt   # keep leading numerals as-is
+    if len(txt) <= limit:
+        return txt
+    cut = txt[:limit].rsplit(" ", 1)[0]
+    return (cut or txt[:limit]).rstrip(" ,;:.") + "…"
+
+
+def _fill_incipits(conn, rows):
+    """Attach `incipit` to any leaf dict lacking a heading, from its current version text."""
+    need = [r for r in rows if not (r.get("heading") or "").strip()]
+    if not need:
+        return
+    ids = [r["id"] for r in need]
+    got = dict(conn.execute(
+        "SELECT provision_id, content FROM versions WHERE is_current=1 AND provision_id IN "
+        f"({','.join('?' * len(ids))})", ids).fetchall())
+    for r in need:
+        r["incipit"] = _incipit(got.get(r["id"]))
+
+
 def _chapter_index(conn, iid, chap):
     """KM 'View 1' — chapter rail + section grid. Groups an instrument's leaf provisions
     under their TOP-LEVEL container ('chapter'); returns the selected chapter's grid. For a
@@ -242,6 +271,7 @@ def _chapter_index(conn, iid, chap):
     tops = [r for r in rows if r["parent_id"] is None and r["kind"] in _CONTAINER_KINDS]
     if not tops:                                            # flat instrument — no chapter rail
         grid = sorted(leaves, key=key)
+        _fill_incipits(conn, grid)
         return {"flat": True, "chapters": [], "selected": None, "sel_chap": None,
                 "grid": grid, "numw": numw(grid)}
     groups: dict = {}
@@ -255,6 +285,7 @@ def _chapter_index(conn, iid, chap):
                          "range": f"{secs[0]['label']}–{secs[-1]['label']}" if secs else ""})
     sel = chap if (chap in groups) else (chapters[0]["id"] if chapters else None)
     grid = sorted(groups.get(sel, []), key=key)
+    _fill_incipits(conn, grid)
     return {"flat": False, "chapters": chapters, "selected": sel, "sel_chap": by_id.get(sel),
             "grid": grid, "numw": numw(grid)}
 

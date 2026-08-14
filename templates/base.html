@@ -124,6 +124,9 @@
     .secitem .sn{font-family:var(--mono); font-weight:500; font-size:14px; color:var(--navy);
       width:var(--numw, 6ch); flex:none; white-space:nowrap;}
     .secitem .st{font-family:var(--serif); font-size:15px; line-height:1.4; color:var(--body); min-width:0;}
+    /* preview text shown when a provision has no source heading (BR/FR articles) — muted so it
+       reads as the provision's own opening words, not an official title */
+    .st.incipit, .secttl.incipit{color:var(--body-muted); font-style:italic;}
     .page{padding:26px 34px 48px;}
 
     /* ── Reading-column vocabulary ────────────────────────────────────── */
