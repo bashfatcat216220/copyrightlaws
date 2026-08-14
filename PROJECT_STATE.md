@@ -6,6 +6,14 @@ _Last updated: 2026-08-14._
 
 ## Where we are (one breath)
 
+> **Full 18-jurisdiction validity audit (6 fable agents, 2026-08-14) → `AUDIT-FINDINGS-2026-08-14.md`
+> (read it for the per-finding fix status).** Remediation is running WAVE BY WAVE: waves 1–3 DONE &
+> pushed (fabricated treaty pinpoints purged + parser root-fixes; CDPA repeal notices + cross-cutting
+> `status='repealed'`; SG/CA/AU structural excisions). Waves 4–6 on the docket (PDF footnote purges
+> ES/NL/IN/IT incl. ES Art.28; missing content IT 182 / ES back-matter / CDPA Sch.5A / MX transitory /
+> treaty Agreed Statements; currency-vintage UI flags FR ~2006 & ES ~2012, CN citations, KR `¡?`, eCFR).
+> Ingest-correctness rules learned are codified in `CLAUDE.md` ("Ingest correctness rules").
+
 **Phase 0 done · jurisdiction breadth done · Tier-1 completions done.** **32 instruments ·
 14,088 provisions · 5,325 versions** across 18 jurisdictions. US = 17 U.S.C. + 37 C.F.R.;
 EU = 8 copyright directives (InfoSoc + DSM/Software/Database/Term/Rental/Orphan/Enforcement);

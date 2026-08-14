@@ -77,13 +77,57 @@ sha256, versions, and syncs FTS.
   CourtListener opinions citing a section). TODO: per-subsection text; deep-linkable provision
   URLs (`/instrument/{id}/{citation}`); the comparative matrix (human-gated). Live status +
   the ordered backlog live in `PROJECT_STATE.md` — read it fresh.
-- **Validity audits (recurring).** Read-only agents check stored law against official sources
-  per jurisdiction; findings + fixes are logged in `PROJECT_STATE.md` ("Audit & remediation").
-  Parsers are hardened to NEVER mint pinpoints from body cross-refs (treaty: paragraph number
-  must be 1–20) and to strip scraped `<script>`/`<style>` before storing text — both are
-  prime-rule-1 (no fake law) guards; keep them when touching the ingests.
+- **Validity audits (recurring).** Read-only `fable` agents check stored law against the SOURCE
+  ARTIFACT (not just the DB) per jurisdiction. The full 18-jurisdiction sweep (2026-08-14) is in
+  `AUDIT-FINDINGS-2026-08-14.md` with per-finding fix status; live status in `PROJECT_STATE.md`.
+  Waves 1–3 done (fabricated treaty pinpoints purged + root fixes; CDPA repeal notices + `status`;
+  SG/CA/AU structural excisions). Waves 4–6 on the docket (PDF footnote purges ES/NL/IN/IT incl.
+  ES Art.28; missing content IT 182 / ES back-matter / CDPA Sch.5A / MX transitory / treaty Agreed
+  Statements; currency-vintage UI flags FR ~2006 & ES ~2012, CN citations, KR `¡?`, eCFR headings).
 - **Pipeline tracker — TODO:** Congress + LegiScan 50-state + EUR-Lex prep acts + FR NOIs.
 - **Tier-3 — TODO:** metadata index from WIPO Lex, link-only, "not maintained".
+
+## Ingest correctness rules (audit-hardened — keep these when touching `src/store/`)
+Learned from the 2026-08-14 audit; these are prime-rule-1 (no fake law) corollaries.
+1. **No fabricated pinpoints — sequential numbering only.** A numbered-paragraph child `(N)` is
+   real ONLY as part of a contiguous run `(1),(2),(3)…`. A lone/out-of-sequence `(N)` is a
+   footnote marker ("other use (7)"), a cross-reference ("Article 7(1) of…"), a year ("(1971)"),
+   or a duplicate — NEVER mint a provision for it. Enforced in `ingest_treaty`/`ingest_berne`
+   (`expected`-counter). The old "1–20 range" guard was insufficient. Also: never let the
+   `RecordSet` `#N` collision-uniquifier create pinpoint citations (e.g. `Art. 30(2) #2`).
+2. **Repeal notices, not blanks.** A repealed/deleted/omitted/vetoed/reserved provision shows the
+   SOURCE's own notice verbatim (e.g. "S. 265 repealed (9.12.2001) by S.I. 2001/3949…", "[Deleted]",
+   "(abrogé)") + `status='repealed'`. Never blank, never a fabricated pre-repeal text (that text is
+   usually not in the source). `_common.is_repealed()` auto-detects the tombstone → sets `status`;
+   `ingest_clml` mines the `<Commentary>` for CDPA's empty `<Text/>` stubs. Reader shows a rust
+   "Repealed" badge. Where no heading/text exists at all, show the "read at source" placeholder.
+3. **Segmentation stops at structural boundaries.** An article/section body must NOT run to
+   "next Article" or end-of-file — cut at the annex/appendix/footnote/endnote block, the trailing
+   table-of-contents, the amending-act "RELATED PROVISIONS" appendix, or the schedule. The
+   classic bug is the LAST element swallowing everything after it (TRIPS Art.73 ate the Annex;
+   AU s.249 ate 68 KB of endnotes; SG re-parsed a trailing TOC into 111 ghost containers; CA
+   ingested amending-act sections as fake C-42 pinpoints).
+4. **PDF-extracted sources (`*.txt` from `pdftotext`) leak footnotes.** Strip superscript markers
+   glued to words (`3[sound recording]`, "authors.6,7") and footnote BODIES absorbed at an
+   article's tail — and beware a footnote digit fused into an article NUMBER (IT "Article 182" +
+   fn "8" → "1828", which dropped Art. 182 entirely). Verify article NUMBERING is complete.
+5. **Strip scraped junk before storing.** Remove `<script>`/`<style>` blocks BEFORE tag-stripping
+   (else inner JS survives as text); drop dangling unclosed tags at end-of-fragment (`<div`);
+   strip EUR-Lex consolidation markers `▼B/▼M1/►M1◄` as a unit; normalize known mojibake.
+6. **Cross-manifestation ≠ amendment.** Re-basing an instrument onto a different source shape
+   (EU original→consolidated; 2017→2019 Formex) is NOT an observed amendment — do NOT run the
+   change monitor for it (a cross-source text diff is formatting noise that would fire false
+   "changed" alerts). The monitor is only meaningful across SAME-source point-in-time versions.
+7. **Don't full-re-ingest a point-in-time-monitored instrument** (CDPA carries pit versions +
+   fired `alerts` + the s.205B merge). Apply targeted/surgical fixes to the current version to
+   avoid disrupting monitoring history; fix the ingest for durability + verify on a scratch clone.
+8. **Flag stale sources.** Some hand-loaded translations are years behind (FR CPI ~2006, ES TRLPI
+   ~2012). The text is faithful-as-of-its-vintage but silently stale → surface a "source vintage"
+   caveat in the UI on those instruments (Bing-approved 2026-08-14). Documented R-article / scope
+   exclusions (e.g. FR regulatory articles) belong in the instrument note too.
+9. **Verify against the SOURCE artifact, not the DB.** The DB can look complete while the parser
+   dropped, blanked, or misattributed content — always diff stored provisions against the fetched
+   artifact. Scratch-clone with the sqlite backup API (a bare `cp` misses the WAL).
 
 ## How to run
 - Python: `~/Julie/ai-law-portal/.venv/bin/python` (fastapi/uvicorn/jinja2). No `sqlite3` CLI.
