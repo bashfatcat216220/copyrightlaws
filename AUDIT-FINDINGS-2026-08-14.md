@@ -143,7 +143,11 @@ Severity: **H** wrong/blank/missing law shown · **M** degraded · **L** cosmeti
    real sections); `ingest_au` caps the last section at `ActHead1`/Endnotes → s.249 72,000→3,394 chars
    (ends "…within 4 years of receiving it."). TRIPS Art.73 annex bleed already done in wave 1.
    **F-SG1, F-CA1, F-AU1 fixed.**
-4. **PDF footnote purges** — ES (~20 arts, Art.28!), NL (~6), IN (54 bodies), IT hyphenation. [ingest `_clean`]
+4. **MOSTLY DONE (2026-08-14).** ES: footnote bleed stripped from ~20 articles (Art. 28 no longer
+   reads as repealed) + F-ES1 bis/ter sort collision fixed (31 bis→(31,BIS)). IN: amendment
+   apparatus `N[text]`/`N***` stripped from 54 bodies + 11 headings. NL: page-bottom footnote lines
+   + glued footnote digits stripped from ~6 articles. All re-ingested both DBs. **F-ES1, F-ES3, F-IN1,
+   F-NL1 fixed.** Remaining: IT hyphenation line-splits (F-IT5, low).
 5. **Missing-content restoration** — IT 182/182bis/175-179 untangle; ES back-matter split; CDPA Schedule 5A;
    MX transitory; treaty Agreed Statements + TRIPS Annex as own provisions. [ingest + re-fetch where needed]
 6. **Currency/UI** — flag FR ~2006 & ES ~2012 source vintage; CN subchapter citations; KR `¡?`; ecfr headings.
