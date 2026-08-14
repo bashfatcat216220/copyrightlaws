@@ -125,18 +125,18 @@ def _add_article(rs: RecordSet, cite_prefix: str, i: int, token: str, heading: s
                  sort_int=si, sort_suffix=su, role="enacting", citation=cite,
                  content=body or None)
     # child paragraphs: "(1) …" (WIPO) or "1. …" (WTO). Addressable only; article holds text.
-    # GUARD: a parenthetical is only a paragraph marker if it's a PLAUSIBLE paragraph number
-    # (1..20). Years and oversized numbers are cross-references ("Berne (1971)", "(1994)") —
-    # NOT pinpoints. Minting provisions from those is fabricated citation (prime rule 1).
+    # GUARD: only a STRICTLY SEQUENTIAL run counts — (1),(2),(3)… A real numbered-paragraph list
+    # starts at (1) and increments. Anything out of sequence is a footnote marker ("other use (7)"),
+    # a cross-reference ("Article 14(2)"), a year ("(1971)"), or a duplicate — NOT a pinpoint.
+    # Minting provisions from those is fabricated citation (prime rule 1: no fake law).
+    expected = 1
     for pm in re.finditer(r"(?:^|\s)(?:\((\d+)\)|(\d+)\.\s)", body or ""):
         n = int(pm.group(1) or pm.group(2))
-        if not (1 <= n <= 20):
-            continue
-        pcite = f"{cite}({n})"
-        if pcite in {r["citation"] for r in rs.records}:
+        if n != expected:
             continue
         rs.add(parent_local=aid, kind="paragraph", label=f"({n})", sort_int=n,
-               role="enacting", citation=pcite, content=None)
+               role="enacting", citation=f"{cite}({n})", content=None)
+        expected += 1
 
 
 # ── mode: WIPO server-rendered HTML (Rome / Beijing / Marrakesh) ─────────────
@@ -231,6 +231,11 @@ def _parse_wto_html(path: str, cite_prefix: str) -> RecordSet:
         token = f"{m.group(1)}{m.group(2) or ''}"
         end = heads[i + 1].start() if i + 1 < len(heads) else min(len(html), m.end() + 20000)
         seg = html[m.end():end]
+        # The LAST article (73) runs to end-of-page and would swallow the ANNEX + APPENDIX +
+        # footnotes block (fabricating 73(1)-(9) from the annex's numbered paras). Cut there.
+        cut = re.search(r"ANNEX\s+TO\s+THE\s+TRIPS\s+AGREEMENT", seg, re.I)
+        if cut:
+            seg = seg[:cut.start()]
         # marginal note = first centred paragraph; body = everything after it (so the note
         # isn't duplicated at the head of the text).
         hm = re.search(r"<p[^>]*class=\"[^\"]*center[^\"]*\"[^>]*>(.*?)</p>", seg, re.S | re.I)

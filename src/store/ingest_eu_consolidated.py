@@ -85,8 +85,10 @@ def _strip(frag: str) -> str:
     frag = re.sub(r'<a\b[^>]*class="[^"]*footnote[^"]*"[^>]*>.*?</a>', " ", frag, flags=re.S | re.I)
     frag = re.sub(r"<[^>]+>", " ", frag)
     frag = htmlmod.unescape(frag)
-    frag = frag.replace("►", " ").replace("◄", " ").replace("▼", " ")  # ► ◄ ▼
-    frag = re.sub(r"(?<![A-Za-z])[MBCN]\d+(?![A-Za-z])", " ", frag)  # stray M1/B1 amendment refs
+    # EUR-Lex consolidation markers: ▼B / ▼M1 / ►M1◄ — strip the glyph WITH its base/amendment
+    # tag (letter+digits) as one unit, else "▼B" leaves a stray "B" at an article's end.
+    frag = re.sub(r"[►▼◄]\s*[A-Z]?\d*", " ", frag)
+    frag = re.sub(r"(?<![A-Za-z])[MBCN]\d+(?![A-Za-z])", " ", frag)  # any remaining stray M1/B1 refs
     return re.sub(r"\s+", " ", frag).strip()
 
 

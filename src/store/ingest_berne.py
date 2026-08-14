@@ -89,15 +89,18 @@ def parse(html_path: str) -> list[dict]:
         body = _clean(html[m.end(): heads[i + 1].start() if i + 1 < len(heads) else m.end() + 8000])
         aid = add(parent_local=None, kind="article", label=label, heading=note,
                   sort_int=si, sort_suffix=su, role="enacting", citation=cite, content=body or None)
-        # numbered paragraphs (1)(2)... as addressable child provisions (article carries the text)
-        paras = re.split(r"(?=\(\d+\)\s)", body)
-        for p in paras:
+        # numbered paragraphs (1)(2)... as addressable child provisions (article carries the text).
+        # STRICTLY SEQUENTIAL only: a real list runs (1),(2),(3)… — a "(N)" out of sequence is a
+        # cross-reference ("Article 7(1) of…") or duplicate, not a pinpoint (prime rule 1: no fake law).
+        expected = 1
+        for p in re.split(r"(?=\(\d+\)\s)", body):
             pm = re.match(r"\((\d+)\)", p)
-            if not pm:
+            if not pm or int(pm.group(1)) != expected:
                 continue
-            add(parent_local=aid, kind="paragraph", label=f"({pm.group(1)})", heading=None,
-                sort_int=int(pm.group(1)), sort_suffix="", role="enacting",
-                citation=f"{cite}({pm.group(1)})", content=None)
+            add(parent_local=aid, kind="paragraph", label=f"({expected})", heading=None,
+                sort_int=expected, sort_suffix="", role="enacting",
+                citation=f"{cite}({expected})", content=None)
+            expected += 1
     return records
 
 
