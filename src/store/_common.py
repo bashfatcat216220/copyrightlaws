@@ -37,6 +37,23 @@ def ordinal(token: str, doc_index: int) -> tuple[int, str]:
     return (int(m.group(1)), m.group(2).upper()) if m else (doc_index, "")
 
 
+# A provision is REPEALED when its whole text is the source's own tombstone notice — "Deleted",
+# "[Repealed …]", "(repealed)", "Omitted", "abrogé/derogado/abrogato/vervallen/weggefallen",
+# "VETOED", or CDPA's row-of-dots. Detected from the notice itself (grounded), never invented.
+_REPEAL_RE = re.compile(
+    r"^\s*[\(\[【]?\s*(deleted|repealed|omitted|renumbered|abrog|derogad|abrogat|soppress|"
+    r"se deroga|revogad|vetad|vetoed|vervallen|weggefallen|aufgehoben)", re.I)
+
+
+def is_repealed(content: str | None, heading: str | None) -> bool:
+    for t in (heading, content):
+        if t and _REPEAL_RE.match(t.strip()) and len(t.strip()) < 400:
+            return True
+    if content and content.strip() and set(content.strip()) <= set(". "):   # CDPA dots-tombstone
+        return True
+    return False
+
+
 class RecordSet:
     """Ordered provision records with a deterministic citation-uniqueness guard."""
 
@@ -46,14 +63,17 @@ class RecordSet:
 
     def add(self, *, kind: str, label: str, sort_int: int, citation: str,
             parent_local: int | None = None, heading: str | None = None,
-            sort_suffix: str = "", role: str = "enacting", content: str | None = None) -> int:
+            sort_suffix: str = "", role: str = "enacting", content: str | None = None,
+            status: str | None = None) -> int:
         self._seen[citation] = self._seen.get(citation, 0) + 1
         if self._seen[citation] > 1:                       # collision → deterministic #n suffix
             citation = f"{citation} #{self._seen[citation]}"
         lid = len(self.records) + 1
+        # status: explicit override, else auto-detect a repeal tombstone from the notice text.
+        st = status or ("repealed" if is_repealed(content, heading) else "in_force")
         self.records.append(dict(local_id=lid, parent_local=parent_local, kind=kind, label=label,
                                  heading=heading, sort_int=sort_int, sort_suffix=sort_suffix,
-                                 role=role, citation=citation, content=content))
+                                 role=role, citation=citation, content=content, status=st))
         return lid
 
 
@@ -82,16 +102,17 @@ def upsert_instrument(conn: sqlite3.Connection, inst: dict) -> int:
 def _upsert_provision(conn, iid, parent_id, r) -> int:
     row = conn.execute("SELECT id FROM provisions WHERE instrument_id=? AND citation=?",
                        (iid, r["citation"])).fetchone()
+    st = r.get("status") or "in_force"
     if row:
         conn.execute("UPDATE provisions SET parent_id=?, sort_int=?, sort_suffix=?, label=?, "
-                     "heading=?, kind=?, role=? WHERE id=?",
+                     "heading=?, kind=?, role=?, status=? WHERE id=?",
                      (parent_id, r["sort_int"], r["sort_suffix"], r["label"], r["heading"],
-                      r["kind"], r["role"], row[0]))
+                      r["kind"], r["role"], st, row[0]))
         return row[0]
     cur = conn.execute("INSERT INTO provisions (instrument_id, parent_id, sort_int, sort_suffix, "
-                       "label, heading, kind, role, citation) VALUES (?,?,?,?,?,?,?,?,?)",
+                       "label, heading, kind, role, citation, status) VALUES (?,?,?,?,?,?,?,?,?,?)",
                        (iid, parent_id, r["sort_int"], r["sort_suffix"], r["label"], r["heading"],
-                        r["kind"], r["role"], r["citation"]))
+                        r["kind"], r["role"], r["citation"], st))
     return cur.lastrowid
 
 

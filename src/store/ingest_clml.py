@@ -77,6 +77,19 @@ def parse(xml_path: str) -> tuple[str, list[dict]]:
     records: list[dict] = []
     seen: dict[str, int] = {}          # deterministic citation-uniqueness guard
 
+    # Repealed CDPA sections carry an empty <Text/> (or a row-of-dots Title) and the repeal is
+    # in a <Commentary> keyed by the Pnumber's <CommentaryRef>. Map id → notice so a repealed
+    # section shows "S. 265 repealed (9.12.2001) by S.I. 2001/3949…" instead of a bare number.
+    commentaries = {el.get("id"): re.sub(r"\s+", " ", "".join(el.itertext())).strip()
+                    for el in root.iter() if local(el.tag) == "Commentary" and el.get("id")}
+
+    def repeal_notice(c) -> str | None:
+        ref = c.find(".//{*}CommentaryRef")
+        if ref is None:
+            return None
+        txt = commentaries.get(ref.get("Ref"))
+        return txt if txt and re.search(r"\b(repeal|revok|omitt|cease)", txt, re.I) else None
+
     def add(**kw) -> int:
         # KNOWN REFINEMENT: some CDPA schedule paragraphs still collide on citation (schedule
         # sub-structure the pinpoint doesn't yet capture). Disambiguate deterministically so a
@@ -131,18 +144,27 @@ def parse(xml_path: str) -> tuple[str, list[dict]]:
                 # masked its change-monitor alert. Strip it so the citation is stable across snapshots.
                 num = (_txt(_child(c, "Pnumber")) or "").rstrip(". ") or None
                 si, su = ordinal(num, sib)
+                content = _operative_text(c)
+                status = "in_force"
+                # _operative_text prefixes the section number; strip it to see if the BODY is an
+                # empty <Text/> or a dots-only row → a repealed stub. Show the grounded repeal notice.
+                body_only = re.sub(r"^\s*\d+[A-Za-z]*\.?\s*", "", content).strip()
+                if not body_only or set(body_only) <= set(". "):
+                    notice = repeal_notice(c)
+                    if notice:
+                        content, status = notice, "repealed"
                 if in_sched:
                     # container_cite is the Schedule (or Schedule+Part) — keeps paragraph
                     # numbers unique when a schedule restarts numbering across its Parts.
                     cite = f"{container_cite or 'CDPA 1988 Sch. ' + str(sched_no)} para. {num}"
                     lid = add(parent_local=parent_local, kind="schedule_para", label=f"para. {num}",
                               heading=group_title, sort_int=si, sort_suffix=su, role="schedule",
-                              citation=cite, content=_operative_text(c))
+                              citation=cite, content=content, status=status)
                 else:
                     cite = f"CDPA 1988 s. {num}"
                     lid = add(parent_local=parent_local, kind="section", label=f"s. {num}",
                               heading=group_title, sort_int=si, sort_suffix=su, role="enacting",
-                              citation=cite, content=_operative_text(c))
+                              citation=cite, content=content, status=status)
                 walk(c, lid, container_cite, cite, [], None, in_sched, sched_no)
             elif name in PLEVEL:
                 sib += 1
@@ -185,16 +207,17 @@ def _upsert_instrument(conn, title) -> int:
 def _upsert_provision(conn, iid, parent_id, r) -> int:
     row = conn.execute("SELECT id FROM provisions WHERE instrument_id=? AND citation=?",
                        (iid, r["citation"])).fetchone()
+    st = r.get("status") or "in_force"
     if row:
         conn.execute("UPDATE provisions SET parent_id=?, sort_int=?, sort_suffix=?, label=?, "
-                     "heading=?, kind=?, role=? WHERE id=?",
+                     "heading=?, kind=?, role=?, status=? WHERE id=?",
                      (parent_id, r["sort_int"], r["sort_suffix"], r["label"], r["heading"],
-                      r["kind"], r["role"], row[0]))
+                      r["kind"], r["role"], st, row[0]))
         return row[0]
     cur = conn.execute("INSERT INTO provisions (instrument_id, parent_id, sort_int, sort_suffix, "
-                       "label, heading, kind, role, citation) VALUES (?,?,?,?,?,?,?,?,?)",
+                       "label, heading, kind, role, citation, status) VALUES (?,?,?,?,?,?,?,?,?,?)",
                        (iid, parent_id, r["sort_int"], r["sort_suffix"], r["label"], r["heading"],
-                        r["kind"], r["role"], r["citation"]))
+                        r["kind"], r["role"], r["citation"], st))
     return cur.lastrowid
 
 

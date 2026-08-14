@@ -129,7 +129,14 @@ Severity: **H** wrong/blank/missing law shown · **M** degraded · **L** cosmeti
    dangling-tag bleed AND the 73(1)-(9) fakes); `ingest_eu_consolidated._strip` strips `▼B/▼M1` as a
    unit (Term `▼B` residue gone). Re-ingested TRIPS; both DBs verified 0 fakes. **F-INT1, F-INT2, F-EU1(Term) fixed.**
    Still open in INT: F-INT3 (agreed statements missing/dumped), F-INT4 (missing pinpoints), F-INT5 (tail-bleed), Database chapter-bleed.
-2. **Korea-class + status** — CDPA 6 repealed ss.→notice; set `status='repealed'` on all tombstones.
+2. **DONE (2026-08-14).** CDPA repealed sections now show the GROUNDED repeal notice from the source
+   `<Commentary>` (e.g. s.265 → "S. 265 repealed (9.12.2001) by S.I. 2001/3949…") — 29 sections
+   (F-GB1 6 + F-GB3 23). Cross-cutting `status='repealed'` set on all 87 tombstone provisions (29 CDPA
+   + 58 others: CA 30, NL 9, DE 6, US 3, ES 3, IT 2, JP 2, KR 2, BR 1); reader shows a rust "Repealed"
+   badge. Durable: `_common` auto-detects repeal tombstones (`is_repealed`) + writes `status`;
+   `ingest_clml` captures the commentary notice + status. **F-GB1, F-GB3, cross-cutting status fixed.**
+   (Remaining durability nit: `ingest_uslm`/`ingest_ecfr`/`ingest_berne`/`ingest_formex` are pre-`_common`
+   — their status is set by the current-data migration but a full rebuild wouldn't re-set it; low priority.)
 3. **Structural excisions** — CA RelatedProvs appendix (28 rows), SG ghost dupes (111 rows), AU s.249
    endnote bleed, TRIPS Art.73 annex bleed. [boundary cuts + re-ingest]
 4. **PDF footnote purges** — ES (~20 arts, Art.28!), NL (~6), IN (54 bodies), IT hyphenation. [ingest `_clean`]
