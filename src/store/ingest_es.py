@@ -85,6 +85,15 @@ def _split_article_num(digits: str, last_num: int) -> int:
 # blank-equivalent when testing whether an article header follows a blank line.
 _FN_LINE = re.compile(r"^\s*\d{1,3}\s*$")
 
+# A translator FOOTNOTE-DEFINITION line (amendment provenance on its own line) — these are meta
+# notes, not operative text: "Subparagraph f) pursuant to … Act 23/2006, dated …", "Article
+# repealed by …", "New name pursuant to …". Operative text never opens this way (real repeal
+# stubs are captured as the whole article's content, not mid-body).
+_FN_DEF = re.compile(
+    r"^(Subparagraph|Paragraph)\b.{0,60}?\bpursuant to\b"
+    r"|^(Article|Section)\b.{0,30}?\brepealed\b"
+    r"|^Repealed by\b|^New (name|wording)\b|^Renamed\b|^Added by\b", re.I)
+
 
 def _strip_fn(text: str | None) -> str | None:
     """Drop a trailing footnote number some headings carry ('Authors66.' → 'Authors')."""
@@ -194,12 +203,19 @@ def parse(path: str) -> RecordSet:
                 am2 = _ARTICLE.match(nxt_raw)
                 if am2 and blank_before(j):        # next real article header ⇒ stop
                     break
-                if nxt and not _FN_LINE.match(nxt_raw):
+                if _FN_LINE.match(nxt_raw):        # a footnote NUMBER — skip it AND its indented
+                    j += 1                         # footnote-TEXT line(s) (operative text is flush-left,
+                    while j < n and lines[j][:1].isspace() and lines[j].strip():   # so leading-space = footnote)
+                        j += 1
+                    continue
+                if nxt and not _FN_DEF.match(nxt):  # skip standalone footnote-definition lines
                     body.append(nxt)
                 j += 1
             content = "\n".join(body).strip() or None
             doc_i += 1
-            si, su = ordinal(art_key, doc_i)       # bis/ter → doc-order fallback
+            # ordinal needs the suffix UNSPACED ("31bis") — the spaced form "31 bis" fails the
+            # numeric regex and collapses to doc order, colliding with real Arts 44/54/56.
+            si, su = ordinal(f"{num}{suffix}", doc_i)
             rs.add(parent_local=parent_for_article(), kind="article",
                    label=f"Article {art_key}", heading=title, sort_int=si, sort_suffix=su,
                    citation=f"TRLPI Art. {art_key}", content=content)
