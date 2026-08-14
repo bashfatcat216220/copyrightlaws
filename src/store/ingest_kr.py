@@ -56,6 +56,7 @@ _ARTNUM = re.compile(r'Article\s+(\d+(?:-\d+)?)\s*(?:\((.*?)\))?', re.S)
 def _clean(frag: str) -> str:
     frag = re.sub(r"<!--.*?-->", " ", frag or "", flags=re.S)   # drop HTML comments (incl. "-->")
     frag = re.sub(r"<[^>]+>", " ", frag)
+    frag = re.sub(r"<[^>]*$", " ", frag)      # drop a dangling unclosed tag at the very end (e.g. "<div")
     frag = frag.replace("법령보기 화면", " ")  # table caption "법령보기 화면"
     return re.sub(r"\s+", " ", htmlmod.unescape(frag)).strip()
 
@@ -110,6 +111,13 @@ def parse(html_path: str) -> RecordSet:
             continue
         num, title = am.group(1), (am.group(2) or None)
         body = _clean(jobody[tm.end():]) if tm else _clean(jobody)
+        if not body:
+            # Repealed articles carry their notice INLINE in the title line and have no body,
+            # e.g. "Article 121 Deleted. <by Act No. 9625, Apr. 22, 2009>" — keep it verbatim
+            # (the source's own repeal notice) so the provision isn't blank. No fabricated text.
+            trailing = head[am.end():].strip()
+            if trailing:
+                body = trailing
         si, su = ordinal(num, doc_i)                       # "35-3" → (35,"") → doc order within 35s
         parent = container["subsection"] or container["subchapter"] or container["chapter"]
         rs.add(parent_local=parent, kind="article", label=f"Article {num}",

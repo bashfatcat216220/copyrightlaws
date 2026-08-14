@@ -239,9 +239,17 @@ a textful reader per jurisdiction all non-empty.** Bugs found and FIXED (both DB
   annotations (official Korean-law convention) are preserved and render correctly (escaped).
 
 Confirmed NON-bugs (left as-is, correct): DE repealed sections (labelled "(repealed)"), US
-17 U.S.C. / 37 C.F.R. reserved/renumbered brackets, KR `<Amended by…>` annotations. Known
-small gaps: **KR Art. 101-6 / 121** carry no heading or text (2 data gaps) — the reader shows
-its "Metadata only — read at source" placeholder, so not broken, just uncaptured.
+17 U.S.C. / 37 C.F.R. reserved/renumbered brackets, KR `<Amended by…>` annotations.
+
+- **KR Art. 101-6 / 121 repeal notices — RESOLVED (2026-08-14).** Not gaps — the source prints
+  them as "Article N Deleted. ⟨by Act No. …⟩" with no `(heading)` and no body, so the KR parser
+  (which keyed on `Article N (Heading)`) captured the number but nothing else. Fixed
+  `ingest_kr`: when an article has no body, keep the inline remainder of the title line verbatim
+  (the source's own repeal notice) as content — no fabricated old text (a repealed provision's
+  superseded text is NOT in the KLRI translation; showing the notice is the honest level, same
+  as DE's "(repealed)"). Also hardened `_clean` to drop a dangling unclosed tag at end-of-frag
+  (this is what had leaked `<div` into Art. 142; a rebuild now reproduces it clean). Re-ingested
+  both DBs: the two articles now read "Deleted. ⟨by Act No. …⟩" in the reader and the index.
 
 ## Remaining work — finish in this order
 
