@@ -137,8 +137,12 @@ Severity: **H** wrong/blank/missing law shown · **M** degraded · **L** cosmeti
    `ingest_clml` captures the commentary notice + status. **F-GB1, F-GB3, cross-cutting status fixed.**
    (Remaining durability nit: `ingest_uslm`/`ingest_ecfr`/`ingest_berne`/`ingest_formex` are pre-`_common`
    — their status is set by the current-data migration but a full rebuild wouldn't re-set it; low priority.)
-3. **Structural excisions** — CA RelatedProvs appendix (28 rows), SG ghost dupes (111 rows), AU s.249
-   endnote bleed, TRIPS Art.73 annex bleed. [boundary cuts + re-ingest]
+3. **DONE (2026-08-14).** Boundary cuts in three ingests + surgical data excision (both DBs):
+   `ingest_sg` stops at the trailing TOC → deleted 111 ghost containers (763→652); `ingest_ca` cuts
+   at `RelatedProvs` → deleted 28 amending-act appendix sections incl. the fake s.280/54.1 (277→249
+   real sections); `ingest_au` caps the last section at `ActHead1`/Endnotes → s.249 72,000→3,394 chars
+   (ends "…within 4 years of receiving it."). TRIPS Art.73 annex bleed already done in wave 1.
+   **F-SG1, F-CA1, F-AU1 fixed.**
 4. **PDF footnote purges** — ES (~20 arts, Art.28!), NL (~6), IN (54 bodies), IT hyphenation. [ingest `_clean`]
 5. **Missing-content restoration** — IT 182/182bis/175-179 untangle; ES back-matter split; CDPA Schedule 5A;
    MX transitory; treaty Agreed Statements + TRIPS Annex as own provisions. [ingest + re-fetch where needed]

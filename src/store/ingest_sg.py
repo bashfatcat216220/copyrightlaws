@@ -72,6 +72,11 @@ def parse(html_path: str) -> RecordSet:
     for m in _SEC.finditer(html):
         events.append((m.start(), "sec", m))
     events.sort(key=lambda e: e[0])
+    # SSO repeats the whole Part/Division/Subdivision spine as a trailing table of contents AFTER
+    # the last section — everything past the last section is that TOC. Drop it, else it re-parses
+    # as a duplicate "ghost" container hierarchy (Part 1 #2, Division 1 #10, …).
+    last_sec = max((i for i, (_p, t, _m) in enumerate(events) if t == "sec"), default=-1)
+    events = events[:last_sec + 1]
 
     rs = RecordSet()
     container = {"part": None, "chapter": None, "subchapter": None}

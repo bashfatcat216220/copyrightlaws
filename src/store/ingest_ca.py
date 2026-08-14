@@ -64,6 +64,12 @@ def _section_content(inner: str) -> str:
 
 def parse(html_path: str) -> RecordSet:
     xml = open(html_path, encoding="utf-8", errors="replace").read()
+    # Cut the "RELATED PROVISIONS" appendix (<Schedule id="RelatedProvs">): it reproduces sections
+    # of amending Acts (s.280, s.54.1, …) that are NOT part of C-42 — ingesting them mints fake
+    # Copyright-Act citations (prime rule 1: no fake law).
+    cut = xml.find('RelatedProvs')
+    if cut != -1:
+        xml = xml[:cut]
     rs = RecordSet()
 
     # Build one document-ordered marker list of Parts and Sections, so each section attaches

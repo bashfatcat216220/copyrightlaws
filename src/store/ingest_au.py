@@ -91,6 +91,10 @@ def parse(html_path: str) -> RecordSet:
             heading = _text(after) or None
             si, su = ordinal(secno, i)
             body_html = html[m.end(): heads[i + 1].start() if i + 1 < len(heads) else len(html)]
+            if i + 1 >= len(heads):     # LAST section: don't swallow The Schedule + the Endnotes
+                endm = re.search(r'<p\b[^>]*class="ActHead1"|>Endnotes?<', body_html)
+                if endm:
+                    body_html = body_html[:endm.start()]
             body = _text(body_html)
             parent = container["subchapter"] or container["chapter"] or container["part"]
             rs.add(parent_local=parent, kind="section", label=f"s. {secno}", heading=heading,
