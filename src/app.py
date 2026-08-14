@@ -110,6 +110,18 @@ def jurisdiction(request: Request, code: str):
                                       _ctx(conn, active_jur=code, j=dict(j) if j else None, insts=insts))
 
 
+# Source-vintage caveats (F-FR1 / F-ES4, Bing-approved 2026-08-14). These hand-loaded
+# translations are faithful AS OF their vintage but years behind the current law — surface
+# that visibly (prime rule 3: flag the caveats per source). Honesty metadata only, keyed by
+# the instrument's ext_id; the stored text is never altered.
+SOURCE_VINTAGE = {
+    "fr-cpi-lit": "Source translation dated ~2006 — may not reflect later amendments; "
+                  "confirm against the official source.",
+    "es-trlpi-1996": "Source translation dated ~2012 — may not reflect later amendments; "
+                     "confirm against the official source.",
+}
+
+
 def _has_provisions(conn) -> bool:
     return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='provisions'"
                         ).fetchone() is not None
@@ -329,7 +341,8 @@ def instrument(request: Request, iid: int, tab: str = "cases",
     tab = "history" if tab == "history" else "cases"
 
     ctx = dict(inst=dict(inst) if inst else None, amendments=amendments, cases=cases, tab=tab,
-               view="none")
+               view="none",
+               vintage_note=SOURCE_VINTAGE.get(inst["ext_id"]) if inst else None)
     if inst and has_prov and sec is not None:              # View 2 — section reader
         rail, sel = _section_reader(conn, iid, sec)
         rail_numw = max((len(s["label"]) for grp in (rail or []) for s in grp["sections"]),

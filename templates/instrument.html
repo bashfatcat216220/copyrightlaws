@@ -80,6 +80,7 @@
       </div>
       <div class="rt">{{ ci.grid|length }} PROVISION{{ '' if ci.grid|length == 1 else 'S' }}</div>
     </div>
+    {% if vintage_note %}<div class="flag warn" style="margin:0 0 14px;">{{ vintage_note }}</div>{% endif %}
     <div class="secgrid" style="--numw: {{ ci.numw }}ch;">
       {% for s in ci.grid %}
         <a class="secitem" href="/instrument/{{ inst.id }}?sec={{ s.id }}">
@@ -132,6 +133,7 @@
         {% if not sel.is_authentic %}<span class="flag warn" style="margin:0;">Consolidated — not authentic</span>{% endif %}
         {% if not sel.is_official_language %}<span class="flag warn" style="margin:0;">Unofficial translation</span>{% endif %}
       </div>
+      {% if vintage_note %}<div class="flag warn" style="margin:6px 0 0;">{{ vintage_note }}</div>{% endif %}
 
       {% if sel.redline_spans %}
         <div class="redline">
@@ -176,6 +178,7 @@
         <div class="status"><div class="lbl">Status</div>
           <div class="val">{{ inst.status|replace('_',' ')|title }}</div></div>
       </div>
+      {% if vintage_note %}<div class="flag warn" style="margin:0 0 14px;">{{ vintage_note }}</div>{% endif %}
       {% if ver and ver.content %}<div class="lawtext">{{ ver.content }}</div>
       {% elif ver %}<div class="placeholder-banner">Metadata only — read at the official source below.</div>
       {% else %}<div class="placeholder-banner">No stored version yet for this instrument.</div>{% endif %}

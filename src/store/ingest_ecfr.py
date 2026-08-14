@@ -59,11 +59,14 @@ def _head(el):
 
 def _split_head(raw: str) -> tuple[str, str | None]:
     """A section HEAD is like '§ 201.1   Communication with the Copyright Office.' — split the
-    '§ N' label from the heading. Falls back to the whole string as the heading."""
-    m = re.match(r"^\s*§+\s*([0-9]+\.[0-9A-Za-z\-]+)\s*(.*)$", raw or "")
+    '§ N' label from the heading. A reserved RANGE reads '§§ 201.19-201.21   [Reserved]': the
+    number token is 'N.N-N.N' — capture the WHOLE range (F-CFR1; the old single-number pattern
+    stopped inside the 2nd dotted number, leaving '.21 [Reserved]' as the heading) and keep the
+    source's '§'/'§§' sigil. Falls back to the whole string as the label."""
+    m = re.match(r"^\s*(§+)\s*([0-9]+\.[0-9A-Za-z]+(?:-[0-9]+\.[0-9A-Za-z]+)?)\s*(.*)$", raw or "")
     if m:
-        heading = m.group(2).strip().rstrip(".") or None
-        return f"§ {m.group(1)}", heading
+        heading = m.group(3).strip().rstrip(".") or None
+        return f"{m.group(1)} {m.group(2)}", heading
     return raw.strip(), None
 
 
@@ -129,11 +132,14 @@ def parse(xml_path: str) -> RecordSet:
                 num = c.get("N")
                 label, heading = _split_head(_head(c) or f"§ {num}")
                 if not num:                                      # defensive: derive from label
-                    mm = re.match(r"§\s*([0-9.]+)", label)
+                    mm = re.match(r"§+\s*([0-9.]+)", label)
                     num = mm.group(1) if mm else str(i)
                 si, su = ordinal(num, i)
                 body = _section_body(c) or None
-                rs.add(kind="section", label=f"§ {num}", heading=heading,
+                # A reserved RANGE (N='201.19-201.21') labels with the source's '§§' sigil;
+                # the citation keeps the single-'§' form (the stable provision key).
+                sig = "§§" if "-" in num else "§"
+                rs.add(kind="section", label=f"{sig} {num}", heading=heading,
                        sort_int=si, sort_suffix=su,
                        parent_local=subpart_local or part_local,
                        citation=f"37 C.F.R. § {num}", content=body)

@@ -148,6 +148,19 @@ Severity: **H** wrong/blank/missing law shown · **M** degraded · **L** cosmeti
    apparatus `N[text]`/`N***` stripped from 54 bodies + 11 headings. NL: page-bottom footnote lines
    + glued footnote digits stripped from ~6 articles. All re-ingested both DBs. **F-ES1, F-ES3, F-IN1,
    F-NL1 fixed.** Remaining: IT hyphenation line-splits (F-IT5, low).
-5. **Missing-content restoration** — IT 182/182bis/175-179 untangle; ES back-matter split; CDPA Schedule 5A;
-   MX transitory; treaty Agreed Statements + TRIPS Annex as own provisions. [ingest + re-fetch where needed]
-6. **Currency/UI** — flag FR ~2006 & ES ~2012 source vintage; CN subchapter citations; KR `¡?`; ecfr headings.
+5. **DONE (2026-08-14, 5 parallel fix-agents).** IT: Art. 182 recovered (footnote "8" was fused into
+   "1828" → header unmatched → whole article dropped) as repealed; Art. 182-bis restored to its real
+   AGCOM/SIAE text; the mis-filed quoted-decree "LDA Art. 7 #2" removed; Arts 175-179 added as repealed;
+   de-hyphenated; +grounded Art. 101 (`l01` OCR) recovered → 258 articles, no missing integers.
+   ES: Art. 167 bounded (715 ch) + back matter split into 27 provisions (5 Additional/20 Transitional/
+   Repeal/Final). Treaties: WCT 10 / WPPT 16 / Beijing 11 / Marrakesh 13 Agreed Statements as own
+   `recital` provisions + TRIPS Annex+Appendix restored; Beijing Art.30 / Marrakesh Art.22 dumps cleared.
+   CDPA Schedule 5A filled SURGICALLY (33 entries, alerts still 91, no existing-row churn). MX transitory
+   (9 clauses + container, "Transitional" per source). **F-IT1..5, F-ES2, F-INT3/annex, F-GB2, F-MX1 fixed.**
+6. **DONE (2026-08-14).** CN subchapter citations use the enclosing chapter roman (Ch. II Sec. 1);
+   KR `¡?`→`'` mojibake; eCFR reserved-range headings show full "§§ X-Y [Reserved]"; FR (~2006) & ES
+   (~2012) source-vintage UI caveat on those instruments' pages. **F-CN1, F-KR1, F-CFR1, F-FR1, F-ES4 fixed.**
+
+**Remaining (low):** IT hyphenation edge cases if any; ES Art. 167 "repealed by" was the real Repeal
+Provision (now split out, resolved); F-ES4/F-FR1 currency is FLAGGED not re-fetched (by design).
+Full regression after all waves: 0 fabricated pinpoints, 0 junk, 0 blank bodies, 0 duplicate citations.

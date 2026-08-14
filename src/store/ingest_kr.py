@@ -58,6 +58,9 @@ def _clean(frag: str) -> str:
     frag = re.sub(r"<[^>]+>", " ", frag)
     frag = re.sub(r"<[^>]*$", " ", frag)      # drop a dangling unclosed tag at the very end (e.g. "<div")
     frag = frag.replace("법령보기 화면", " ")  # table caption "법령보기 화면"
+    # F-KR1: upstream encoding artifact — KLRI serves "Author¡?s" where it means "Author’s"
+    # (a proper "’" appears elsewhere in the same file). Normalize known mojibake, never law.
+    frag = frag.replace("¡?", "’")
     return re.sub(r"\s+", " ", htmlmod.unescape(frag)).strip()
 
 

@@ -83,6 +83,7 @@ def parse(path: str) -> RecordSet:
 
     rs = RecordSet()
     chapter_lid: int | None = None
+    chapter_roman: str | None = None            # roman numeral of the OPEN chapter (for Sec. citations)
     section_lid: int | None = None
 
     for i, (start, end, kind, val) in enumerate(markers):
@@ -94,15 +95,20 @@ def parse(path: str) -> RecordSet:
             chapter_lid = rs.add(parent_local=None, kind="chapter",
                                  label=f"Chapter {roman}", heading=heading,
                                  sort_int=si, citation=f"Copyright Law (China) Ch. {roman}")
+            chapter_roman = roman
             section_lid = None                  # a new chapter clears the open section
         elif kind == "section":
             num = val
             si, su = ordinal(num, i)
             heading = _clean(seg) or None
+            # F-CN1: cite the ENCLOSING CHAPTER's roman numeral, not the section number
+            # ("Ch. II Sec. 3", not "Ch. 3 Sec. 3"). Section numbers repeat across chapters
+            # (Ch. II and Ch. IV each hold Sections 1–4) but the chapter qualifier makes the
+            # citation unique — no #N uniquifier (never a minted pinpoint, ingest rule 1).
             section_lid = rs.add(parent_local=chapter_lid, kind="subchapter",
                                  label=f"Section {num}", heading=heading,
                                  sort_int=si, sort_suffix=su,
-                                 citation=f"Copyright Law (China) Ch. {val} Sec. {num} #{i}")
+                                 citation=f"Copyright Law (China) Ch. {chapter_roman} Sec. {num}")
         else:  # article — the operative, versioned content
             num = str(val)
             si, su = ordinal(num, i)
