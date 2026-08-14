@@ -70,11 +70,18 @@ sha256, versions, and syncs FTS.
   search), then the `provisions` migration signed off + applied. Schema proven on 4 source
   shapes (USLM / CLML / Formex / WIPO HTML).
 - **Breadth — DONE (Tier-2, 14 countries) · Tier-1 completions IN PROGRESS.** 18 instruments
-  loaded (US/UK/EU/INT + DE/CA/AU/NL/IN/SG/FR/ES/IT/JP/CN/KR/BR/MX). Finishing 37 C.F.R. +
-  the rest of the EU directives + the core treaties.
-- **Depth layers — TODO (next):** change monitoring (hash-diff → redline → digest — where
-  partners start caring); real Cases data (`case_treatment`); per-subsection text; deep-
-  linkable provision URLs; the comparative matrix.
+  loaded (US/UK/EU/INT + DE/CA/AU/NL/IN/SG/FR/ES/IT/JP/CN/KR/BR/MX). Tier-1 completions
+  (37 C.F.R. + the rest of the EU directives + the core treaties) DONE → 32 instruments.
+- **Depth layers — IN PROGRESS.** DONE: change monitoring (hash-diff → redline → `/alerts`
+  digest + daily `src/monitor/refresh.py` cron, UK+US) · real Cases data (`case_treatment`,
+  CourtListener opinions citing a section). TODO: per-subsection text; deep-linkable provision
+  URLs (`/instrument/{id}/{citation}`); the comparative matrix (human-gated). Live status +
+  the ordered backlog live in `PROJECT_STATE.md` — read it fresh.
+- **Validity audits (recurring).** Read-only agents check stored law against official sources
+  per jurisdiction; findings + fixes are logged in `PROJECT_STATE.md` ("Audit & remediation").
+  Parsers are hardened to NEVER mint pinpoints from body cross-refs (treaty: paragraph number
+  must be 1–20) and to strip scraped `<script>`/`<style>` before storing text — both are
+  prime-rule-1 (no fake law) guards; keep them when touching the ingests.
 - **Pipeline tracker — TODO:** Congress + LegiScan 50-state + EUR-Lex prep acts + FR NOIs.
 - **Tier-3 — TODO:** metadata index from WIPO Lex, link-only, "not maintained".
 
@@ -83,7 +90,8 @@ sha256, versions, and syncs FTS.
 - Init DB:  `python src/db.py`  · apply the provisions migration: run
   `db/migrations/001_provisions_rebuild.sql` (already applied to `corpus.db`).
 - Web:  `uvicorn src.app:app` (we run `--port 8021`) -> the reader/search over the live corpus.
-- Ingest a source: `python src/store/ingest_<x>.py --db db/corpus.db --allow-corpus --html/--xml <artifact> --source-url <url>`. `store/_common.py` = shared writer; monitor/matrix still stubs.
+- Ingest a source: `python src/store/ingest_<x>.py --db db/corpus.db --allow-corpus --html/--xml <artifact> --source-url <url>`. `store/_common.py` = shared writer (idempotent BY CONTENT — re-fetch of unchanged text adds no version).
+- Change monitor: `python src/monitor/monitor.py --db db/corpus.db [--instrument N]` (diffs version history → `alerts`); `src/monitor/refresh.py` = fetch → re-ingest → monitor (cron). Matrix still a stub.
 - corpus.db + corpus-demo.db + spike/ are gitignored (rebuildable from the ingests).
 
 ## Decisions pending
