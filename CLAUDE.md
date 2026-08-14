@@ -20,6 +20,17 @@ do NOT remix its data or "sync" the two — they are different corpora.
 3. **Flag the caveats per source.** Unofficial translation → `is_official_language=0`
    (label it). EU consolidated → `is_authentic=0` ("not authentic"). UK consolidated may
    carry `has_unapplied_effects=1`. Surface these in the UI, never silently.
+3a. **Authority is its own axis, NOT a function of `type` or publisher** (migration 002).
+   The U.S. Copyright Office produces BOTH binding legislative rules (37 C.F.R., notice-and-
+   comment under delegated authority — force of law) AND non-binding guidance (the Compendium,
+   circulars) — same author, different legal status by PROCESS. So `instruments.authority` =
+   `binding` | `persuasive` | `precedent` is set by process, never inferred from `type`.
+   Also per-instrument: `positive_law` (Title 17 is enacted into positive law → its Code text
+   is *legal evidence of the law*, not merely prima facie; varies by title/jurisdiction);
+   `source_edition` (eCFR & OLRC-online are government *finding aids*, NOT the official legal
+   edition — the GPO annual CFR + Federal Register / the printed U.S. Code control). Caselaw is
+   a FOURTH category (`type='case'`, `authority='precedent'`, `court_level`): binding vs
+   persuasive is CONTEXTUAL to the reader's court — compute it, never flatten it into guidance.
 4. **The matrix is human-gated.** Comparative-matrix cells are model-DRAFTED from a cited
    source version but shown as authority ONLY when `verified_by` is set. Same discipline as
    ai-law-portal's privilege labels: draft → human sign-off → publish.
