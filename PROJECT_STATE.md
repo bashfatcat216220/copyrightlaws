@@ -7,12 +7,16 @@ _Last updated: 2026-08-14._
 ## Where we are (one breath)
 
 > **Full 18-jurisdiction validity audit (6 fable agents, 2026-08-14) → `AUDIT-FINDINGS-2026-08-14.md`
-> (read it for the per-finding fix status).** Remediation is running WAVE BY WAVE: waves 1–3 DONE &
-> pushed (fabricated treaty pinpoints purged + parser root-fixes; CDPA repeal notices + cross-cutting
-> `status='repealed'`; SG/CA/AU structural excisions). Waves 4–6 on the docket (PDF footnote purges
-> ES/NL/IN/IT incl. ES Art.28; missing content IT 182 / ES back-matter / CDPA Sch.5A / MX transitory /
-> treaty Agreed Statements; currency-vintage UI flags FR ~2006 & ES ~2012, CN citations, KR `¡?`, eCFR).
-> Ingest-correctness rules learned are codified in `CLAUDE.md` ("Ingest correctness rules").
+> — REMEDIATION COMPLETE (waves 1–6, all pushed).** Wave 1: 100 fabricated treaty pinpoints purged +
+> sequential-numbering parser fix. Wave 2: CDPA repeal notices + cross-cutting `status='repealed'` (87
+> provisions, rust "Repealed" tombstone). Wave 3: SG ghost dupes / CA amending-act appendix / AU s.249
+> excised. Wave 4: PDF footnote purges (ES Art.28, IN, NL) + ES bis/ter sort fix. Wave 5 (5 parallel
+> fix-agents): IT Art.182/182bis/175-179 untangle + Art.101, ES back-matter split, treaty Agreed
+> Statements + TRIPS Annex, CDPA Schedule 5A (surgical — alerts still 91), MX transitional. Wave 6:
+> CN citations, KR `¡?`, eCFR ranges, FR/ES source-vintage UI flags. Final regression: 0 fabricated
+> pinpoints, 0 junk, 0 blank bodies, 0 duplicate citations; pytest 6/6. Ingest-correctness rules are
+> codified in `CLAUDE.md` ("Ingest correctness rules"). Corpus now **32 instruments · ~14,099 provisions
+> · ~6,333 versions**.
 
 **Phase 0 done · jurisdiction breadth done · Tier-1 completions done.** **32 instruments ·
 14,088 provisions · 5,325 versions** across 18 jurisdictions. US = 17 U.S.C. + 37 C.F.R.;
