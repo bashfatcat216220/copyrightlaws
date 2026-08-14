@@ -261,6 +261,21 @@
     .histrow .body{border-left:1px solid var(--rule); padding-left:16px;}
     .histrow .body .act{font-family:var(--sans); font-weight:500; font-size:12.5px; color:var(--ink);}
     .histrow .body .eff{font-family:var(--serif); font-size:13.5px; line-height:1.6; color:var(--body-muted); margin-top:2px;}
+    /* Cases tab — case name (serif italic) + citation + treatment keyline (rust = adverse only) */
+    .caserow{padding:15px 0; border-bottom:1px solid var(--rule-light);}
+    .caserow .ch{display:flex; justify-content:space-between; align-items:baseline; gap:12px;}
+    .caserow .cname{font-family:var(--serif); font-style:italic; font-size:15px; line-height:1.4; color:var(--ink);}
+    .caserow .cyr{font-family:var(--mono); font-size:10.5px; color:var(--faint); flex:none;}
+    .caserow .ccite{font-family:var(--mono); font-size:11px; color:var(--label); margin-top:3px;}
+    .caserow .ctreat{border-left:2px solid var(--rule); padding-left:9px; margin-top:9px;}
+    .caserow .ctreat.treat-distinguished, .caserow .ctreat.treat-criticized,
+    .caserow .ctreat.treat-overruled{border-left-color:var(--rust);}
+    .caserow .tlbl{font-family:var(--mono); font-weight:500; font-size:9.5px; letter-spacing:0.13em;
+      text-transform:uppercase; color:var(--label); display:block; margin-bottom:5px;}
+    .caserow .ctreat.treat-distinguished .tlbl, .caserow .ctreat.treat-criticized .tlbl,
+    .caserow .ctreat.treat-overruled .tlbl{color:var(--rust);}
+    .caserow .chold{font-family:var(--sans); font-size:12.5px; line-height:1.55; color:var(--body-muted);}
+    .caserow .csrc{font-family:var(--mono); font-size:10px; color:var(--navy); margin-top:7px; display:inline-block;}
   </style>
 </head>
 <body>

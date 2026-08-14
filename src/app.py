@@ -40,7 +40,7 @@ def _rail(conn: sqlite3.Connection) -> dict:
     tiers: dict = {}
     for r in conn.execute(
         "SELECT j.tier, j.code, j.name, "
-        "  (SELECT COUNT(*) FROM instruments i WHERE i.jurisdiction=j.code) AS n "
+        "  (SELECT COUNT(*) FROM instruments i WHERE i.jurisdiction=j.code AND i.type != 'case') AS n "
         "FROM jurisdictions j ORDER BY j.tier, j.name"):
         tiers.setdefault(r["tier"], []).append(dict(r))
     return tiers
@@ -50,7 +50,7 @@ def _counts(conn: sqlite3.Connection) -> dict:
     """Live corpus counts for the breadcrumb bar (honest, computed — never hardcoded)."""
     return {
         "jurisdictions": conn.execute("SELECT COUNT(*) FROM jurisdictions").fetchone()[0],
-        "instruments": conn.execute("SELECT COUNT(*) FROM instruments").fetchone()[0],
+        "instruments": conn.execute("SELECT COUNT(*) FROM instruments WHERE type != 'case'").fetchone()[0],
         "versions": conn.execute("SELECT COUNT(*) FROM versions").fetchone()[0],
         "alerts": conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0],
     }
@@ -65,13 +65,13 @@ def _ctx(conn, active_jur=None, active_nav=None, **extra) -> dict:
 def index(request: Request):
     conn = _conn()
     stats = {
-        "instruments": conn.execute("SELECT COUNT(*) FROM instruments").fetchone()[0],
+        "instruments": conn.execute("SELECT COUNT(*) FROM instruments WHERE type != 'case'").fetchone()[0],
         "versions": conn.execute("SELECT COUNT(*) FROM versions").fetchone()[0],
         "jurisdictions": conn.execute("SELECT COUNT(*) FROM jurisdictions").fetchone()[0],
     }
     recent = [dict(r) for r in conn.execute(
         "SELECT id, title, official_citation, jurisdiction FROM instruments "
-        "ORDER BY last_updated_at DESC LIMIT 12")]
+        "WHERE type != 'case' ORDER BY last_updated_at DESC LIMIT 12")]
     # distinct official-source domains, for the sources note at the foot of the home page
     from urllib.parse import urlparse
     srcs = {urlparse(u).netloc.replace("www.", "")
@@ -105,7 +105,7 @@ def jurisdiction(request: Request, code: str):
     j = conn.execute("SELECT * FROM jurisdictions WHERE code=?", (code,)).fetchone()
     insts = [dict(r) for r in conn.execute(
         "SELECT id, title, official_citation, type, status FROM instruments "
-        "WHERE jurisdiction=? ORDER BY type, title", (code,))]
+        "WHERE jurisdiction=? AND type != 'case' ORDER BY type, title", (code,))]
     return templates.TemplateResponse(request, "jurisdiction.html",
                                       _ctx(conn, active_jur=code, j=dict(j) if j else None, insts=insts))
 
@@ -160,6 +160,11 @@ def _section_reader(conn, iid, sec):
         sel["history"] = [dict(r) for r in conn.execute(
             "SELECT point_in_time, retrieved_at, is_current FROM versions "
             "WHERE provision_id=? ORDER BY retrieved_at DESC", (sel_id,))]
+        sel["cases"] = [dict(r) for r in conn.execute(
+            "SELECT i.title AS name, i.official_citation AS cite, i.enacted_date AS year, "
+            "  ct.treatment, ct.holding, ct.source_url "
+            "FROM case_treatment ct JOIN instruments i ON i.id=ct.case_instrument "
+            "WHERE ct.provision_id=? ORDER BY i.enacted_date DESC, ct.id", (sel_id,))]
         # if this provision's current version is an alert's new_version, show the redline
         al = conn.execute(
             "SELECT a.summary, a.rule, ov.point_in_time AS old_pit "
@@ -276,7 +281,8 @@ def instrument(request: Request, iid: int, tab: str = "cases",
         rail, sel = _section_reader(conn, iid, sec)
         rail_numw = max((len(s["label"]) for grp in (rail or []) for s in grp["sections"]),
                         default=6) + 1                     # align the rail number column (site standard)
-        ctx.update(view="reader", rail=rail, sel=sel, rail_numw=rail_numw)
+        ctx.update(view="reader", rail=rail, sel=sel, rail_numw=rail_numw,
+                   cases=(sel.get("cases") if sel else []))
     elif inst and has_prov:                                # View 1 — chapter index
         ctx.update(view="index", ci=_chapter_index(conn, iid, chap))
     elif inst:                                             # whole-instrument fallback (no provisions)

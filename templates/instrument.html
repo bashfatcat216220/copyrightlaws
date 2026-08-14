@@ -29,9 +29,23 @@
             </div>
           {% endfor %}
         {% endif %}
+      {% elif cases %}
+        {% for c in cases %}
+          <div class="caserow">
+            <div class="ch"><span class="cname">{{ c.name }}</span>{% if c.year %}<span class="cyr">{{ c.year }}</span>{% endif %}</div>
+            {% if c.cite %}<div class="ccite">{{ c.cite }}</div>{% endif %}
+            <div class="ctreat treat-{{ c.treatment }}">
+              <span class="tlbl">{{ c.treatment }}</span>
+              {% if c.holding %}<span class="chold">{{ c.holding }}</span>{% endif %}
+            </div>
+            {% if c.source_url %}<a class="csrc" href="{{ c.source_url }}" target="_blank" rel="noopener">CourtListener ↗</a>{% endif %}
+          </div>
+        {% endfor %}
+        <p class="empty" style="font-size:10.5px; margin-top:14px;">Opinions citing this section
+          (CourtListener full-text). "Cited" is factual; editorial treatment (followed /
+          distinguished) is not asserted.</p>
       {% else %}
-        <p class="empty">No decisions linked. Case treatment (followed / distinguished /
-          criticized, per provision) is a later phase — it attaches to provisions.</p>
+        <p class="empty">No cases linked to this section.</p>
       {% endif %}
     </div>
   </aside>
