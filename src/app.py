@@ -198,12 +198,18 @@ _CONTAINER_KINDS = ("part", "subpart", "chapter", "subchapter")
 # '(a)'/'(1)'/'(A)' opens a paragraph. Skip markers that are cross-references (a marker
 # immediately followed by a lowercase connective, e.g. '(2) of this subsection'). This is a
 # DISPLAY heuristic over text stored as one blob — the robust fix is per-subsection text.
-_MARK_SPLIT = re.compile(r"(?<=\s)(\((?:[a-z]{1,2}|\d{1,3}|[A-Z]{1,2}|[ivxl]{1,4})\))(?=\s)")
+# Single uppercase only — '[A-Z]' not '[A-Z]{1,2}' — so a reference like '(EU)' / '(EC)' is never
+# read as a subsection marker.
+_MARK_SPLIT = re.compile(r"(?<=\s)(\((?:[a-z]{1,2}|\d{1,3}|[A-Z]|[ivxl]{1,4})\))(?=\s)")
 _XREF = re.compile(r"^(of|or|and|to|through|shall|hereof|thereof|but|nor)\b", re.I)
 
 
 def _format_body(content, heading=None):
-    """Split flat section text into [{mark, text}] paragraphs (KM body structure)."""
+    """Split flat section text into [{mark, text}] paragraphs (KM body structure). A numbered
+    marker '(N)' only opens a paragraph when it CONTINUES THE SEQUENCE — an out-of-sequence
+    '(N)' is a cross-reference in the prose ('as defined in subsection (2)') and stays inline,
+    so numbering isn't thrown off (esp. German Absätze). This is a DISPLAY heuristic over text
+    stored as one blob; the robust fix is per-subsection storage (PROJECT_STATE depth layer c)."""
     if not content:
         return []
     txt = content.strip()
@@ -211,11 +217,18 @@ def _format_body(content, heading=None):
         pos = txt.find(heading.strip())
         if 0 <= pos <= 40:
             txt = txt[pos + len(heading.strip()):].lstrip(" .—:—")
-    toks = _MARK_SPLIT.split(txt)
+    toks = _MARK_SPLIT.split(" " + txt)                    # leading space so a '(1)' at position 0 is matched
     paras, mark, cur = [], "", [toks[0]]
+    exp_num = 1                                             # next expected top-level '(N)'
     for i in range(1, len(toks), 2):
         mk, body = toks[i], (toks[i + 1] if i + 1 < len(toks) else "")
-        if _XREF.match(body.strip()):                      # cross-ref, not a new subsection — keep inline
+        inner = mk[1:-1]
+        if inner.isdigit():
+            if int(inner) != exp_num:                      # out-of-sequence number = cross-ref → inline
+                cur.append(mk + body)
+                continue
+            exp_num += 1
+        elif _XREF.match(body.strip()):                    # letter/roman connective cross-ref → inline
             cur.append(mk + body)
             continue
         paras.append({"mark": mark, "text": " ".join(cur).strip()})
