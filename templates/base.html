@@ -220,6 +220,12 @@
     .placeholder-banner{font-family:var(--mono); font-size:9.5px; letter-spacing:0.14em;
       text-transform:uppercase; color:var(--faint); border-left:2px solid var(--rule);
       padding-left:9px; margin:18px 0;}
+    /* repealed provision — a deliberate tombstone so a terse notice doesn't read as an empty page */
+    .repealed-notice{border:1px solid var(--rust); border-left:4px solid var(--rust);
+      background:var(--paper-warm); padding:20px 22px; margin:22px 0; max-width:640px;}
+    .repealed-notice .rn-mark{font-family:var(--mono); font-size:10.5px; letter-spacing:0.14em;
+      text-transform:uppercase; color:var(--rust); margin-bottom:8px;}
+    .repealed-notice .rn-text{font-family:var(--serif); font-size:16px; line-height:1.6; color:var(--body);}
     /* change-monitor redline (amendment = rust; removed struck, added navy) */
     .redline{border-left:3px solid var(--rust); background:var(--paper-warm2); padding:12px 16px;
       margin:20px 0; font-family:var(--sans); font-size:13px; line-height:1.75; color:var(--body-muted);}
@@ -283,7 +289,7 @@
 </head>
 <body>
   <div class="topbar">
-    <span class="wordmark"><a href="/">Copyright Corpus</a><span class="sub">Finding Aid</span></span>
+    <span class="wordmark"><a href="/">Copyright Corpus</a></span>
     <span class="chrome-divider"></span>
     <nav class="topnav">
       <a href="/" class="{{ 'active' if active_nav == 'browse' }}">Browse</a>

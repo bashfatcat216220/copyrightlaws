@@ -140,7 +140,12 @@
         </div>
       {% endif %}
 
-      {% if sel.body %}
+      {% if sel.status == 'repealed' %}
+        <div class="repealed-notice">
+          <div class="rn-mark">This provision has been repealed</div>
+          <div class="rn-text">{% if sel.body and sel.body[0].text %}{{ sel.body[0].text }}{% elif sel.content %}{{ sel.content }}{% else %}No longer in force. Read the current text at the official source below.{% endif %}</div>
+        </div>
+      {% elif sel.body %}
         {% for p in sel.body %}
           <div class="bodypara"><div class="mark">{{ p.mark }}</div><div class="txt">{{ p.text }}</div></div>
         {% endfor %}
