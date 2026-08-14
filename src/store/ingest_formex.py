@@ -286,10 +286,26 @@ def _store_version(conn, iid, provid, r, source_url, point_in_time,
     content = r["content"]
     digest = sha256(content)
     existing = conn.execute(
-        "SELECT content_sha256 FROM versions WHERE instrument_id=? AND provision_id=? "
+        "SELECT id, content_sha256 FROM versions WHERE instrument_id=? AND provision_id=? "
         "AND point_in_time IS ? AND language='en'", (iid, provid, point_in_time)).fetchone()
     outcome = "unchanged"
-    if not existing or existing[0] != digest:
+    if existing and existing[1] != digest:
+        # A row already occupies this (provision, point_in_time, language) slot — e.g. an
+        # earlier stopgap manifestation of the SAME consolidation date. UNIQUE forbids a
+        # second row, so supersede IN PLACE with this manifestation's text + provenance.
+        conn.execute("UPDATE versions SET is_current=0 WHERE instrument_id=? AND provision_id=?",
+                     (iid, provid))
+        conn.execute(
+            "UPDATE versions SET version_label=?, is_official_language=1, is_consolidated=?, "
+            "is_authentic=?, content=?, content_sha256=?, source_url=?, retrieved_at=?, "
+            "is_current=1 WHERE id=?",
+            (version_label, is_consolidated, is_authentic, content, digest, source_url,
+             now_iso(), existing[0]))
+        conn.execute("DELETE FROM versions_fts WHERE rowid=?", (existing[0],))
+        conn.execute("INSERT INTO versions_fts (rowid, title, citation, body) VALUES (?,?,?,?)",
+                     (existing[0], "Directive 2001/29/EC", r["citation"], content))
+        outcome = "new"
+    elif not existing:
         conn.execute("UPDATE versions SET is_current=0 WHERE instrument_id=? AND provision_id=?",
                      (iid, provid))
         cur = conn.execute(

@@ -140,12 +140,15 @@ pulls these live is not yet built — that's the automation step for change-moni
   metadatum is imprecise. Cheap fix: set `status='repealed'|'renumbered'|'reserved'` on those rows.
 - **`point_in_time` NULL on US versions** — 17 U.S.C. / 37 C.F.R. currency is implied by the
   release-point / eCFR-date in `source_url`, not stamped in `point_in_time` (UK versions do carry it).
-- **InfoSoc sub-article nodes lag by one consolidation** — the EU consolidation re-base is
-  article-level, so InfoSoc's ARTICLE text is current (2019-06-06) but its Formex-derived
-  paragraph/clause CHILD provisions (Art. 5(3)(k) etc.) stay at the 2017-10-10 consolidation. The
-  2017→2019 delta is small (DSM cross-amendments) and the children are low-visibility (rail is
-  chapter→article), but a future clean-up is to re-base InfoSoc from a 2019 Formex manifestation
-  so the pinpoint children match their parent. Term/Database have no sub-article nodes (article-level).
+- **InfoSoc sub-article nodes — RESOLVED (2026-08-14).** Re-based the WHOLE InfoSoc instrument
+  from the 2019-06-06 Formex CONS.ACT (fetched from CELLAR with `Accept: application/xml;type=fmx4`
+  → `spike/artifacts/infosoc_fmx_20190606.xml`), so all 96 article/paragraph/clause current versions
+  now carry `point_in_time=2019-06-06` from ONE manifestation (superseding the article-level ELI-HTML
+  stopgap in place). +3 real new points **Art. 12(4)(e)–(g)** (DSM-added) → 161 provisions. Recitals
+  (61) untouched as authentic-original; 2017 versions retained as `is_current=0`; monitor not run.
+  Required a small `ingest_formex._store_version` change (supersede-in-place when a row already
+  occupies the same `(provision, point_in_time, language)` UNIQUE slot). Term/Database have no
+  sub-article nodes (article-level), so nothing to do there.
 - **EU monitor must skip cross-manifestation transitions** — the original-act → consolidated
   version step is a manifestation re-base, not an amendment; the daily cron only monitors UK+US so
   this is moot today, but if the monitor is ever pointed at EU it would fire formatting-noise alerts
