@@ -2,7 +2,13 @@
 
 > Status comes from THIS file, read fresh. Do not answer "where are we" from memory.
 
-_Last updated: 2026-08-14._
+_Last updated: 2026-08-15._
+
+> **Migration 002 (legal-authority axis) — APPLIED & backfilled (2026-08-14, last commit `68cb6e0`).**
+> Per-instrument `authority` (binding|persuasive|precedent, set by PROCESS not publisher/`type`),
+> `positive_law`, `source_edition`, `court_level`. Backfilled on BOTH DBs: 32 non-case instruments
+> = `binding` (0 NULL), cases = `precedent`. Attorney-driven (Copyright Office makes both binding
+> 37 C.F.R. rules AND non-binding guidance). See CLAUDE.md prime rule 3a.
 
 ## Where we are (one breath)
 
@@ -307,10 +313,35 @@ Confirmed NON-bugs (left as-is, correct): DE repealed sections (labelled "(repea
    c. **Per-subsection text storage** — replace the reader's display-heuristic paragraph split
       (`_format_body`, reconstructs (a)/(1) paragraphs from a flat blob) with real
       per-subsection versions; gives clean, robust pinpoint text.
-   d. **Deep-linkable provision URLs** — `/instrument/{id}/{citation}` (today `?sec=<id>`);
-      a hard requirement for the attorney audience (paste a link to a section into a memo).
+   d. **Deep-linkable provision URLs — IN PROGRESS (2026-08-15).** `/instrument/{id}/{pinpoint}`
+      (today `?sec=<id>`, an internal DB row id that ROTS across a manifest rebuild); a hard
+      requirement for the attorney audience (paste a link to a section into a memo). Design:
+      resolve on a stable case-preserving PINPOINT SLUG derived from the `citation`
+      (`UNIQUE(instrument_id,citation)`) — e.g. `17 U.S.C. § 107` → `/instrument/1/s-107`,
+      `Directive 2001/29 Art. 1(2)(a)` → `.../art-1-2-a`. Verified collision-free across all
+      14,099 provisions (case-preserving distinguishes `(i)`/`(I)`; `#N` uniquifier encoded as
+      `-no-N`). `?sec=` kept as a backward-compatible fallback.
    e. **Comparative matrix** — point `matrix_cells.source_version` at a provision-scoped
       version so a cell's pinpoint is a real section; human-gated (draft → sign-off → publish).
+
+**2f. Ingest the authoritative official editions (NEW — 2026-08-15).** The `source_edition`
+   axis (migration 002) records that only 7/32 instruments are `official`; 7 are `finding_aid`
+   (eCFR & OLRC-online — government finding aids, NOT the official legal edition), plus
+   consolidated/original_act/translation. We MARK the gap but do not yet HOLD the official
+   editions. This item = ingest the controlling texts where they differ from our finding-aid
+   source: GPO annual **CFR** + **Federal Register** (vs eCFR), the printed **U.S. Code** /
+   Statutes at Large (vs OLRC-online), and EU **authentic OJ** text (vs consolidated). Keep the
+   `source_edition` label honest per source; prime rule 2 (finding aid, not authority) still
+   holds — this narrows the gap, it does not make the tool a citation.
+
+**2g. Systematic appendix / schedule / annex sweep (NEW — 2026-08-15).** Appendices & annexes
+   are currently captured only where the 2026-08-14 audit happened to touch them (Berne Appendix
+   loaded; TRIPS Annex loaded as a `schedule` row; CDPA 349 schedule paras). There is no
+   corpus-wide check that every instrument's back-matter (schedules, annexes, appendices,
+   transitional provisions) is either ingested as operative provisions or deliberately excluded
+   with a noted reason. This item = sweep all 32 instruments for un-ingested back-matter, per the
+   ingest-correctness rules (segmentation stops at boundaries; back-matter that is operative law —
+   e.g. UK Schedules — becomes provisions; amending-act "RELATED PROVISIONS" appendices do not).
 
 **3. Tier-3 metadata index** — ~170 more jurisdictions from WIPO Lex, link-only, "not
    maintained" (instrument identity + source_url, no full text). Completes the world map.

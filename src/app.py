@@ -127,6 +127,51 @@ def _has_provisions(conn) -> bool:
                         ).fetchone() is not None
 
 
+def _lcp(strings):
+    """Longest common prefix, trimmed back to the last whole-word boundary — used to strip an
+    instrument's shared citation prefix ('17 U.S.C. ', 'Directive 2001/29 ') off a pinpoint."""
+    if not strings:
+        return ""
+    s1, s2 = min(strings), max(strings)
+    i = 0
+    while i < len(s1) and s1[i] == s2[i]:
+        i += 1
+    p = s1[:i]
+    return p[:p.rfind(" ") + 1] if " " in p else ""
+
+
+def _slugify_pin(pin):
+    """URL-safe, lowercase pinpoint slug — '§ 107' → 's-107', 'Art. 1(2)(a)' → 'art-1-2-a'.
+    § and # are encoded as words so they can't collapse into an adjacent number. Case-only
+    twins (e.g. clause (i) vs (I)) are rare (2 across the whole corpus) and are separated by
+    the deterministic -N disambiguator in _slug_map, not by casing the URL."""
+    s = pin.replace("§", " s ").replace("¶", " para ").replace("#", " no ").lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s or "x"
+
+
+def _slug_map(conn, iid):
+    """Deep-linkable pinpoint slugs for one instrument's provisions. Keyed on the stable
+    `citation` (UNIQUE per instrument), NOT the DB row id — so a link pasted into a memo
+    survives a manifest rebuild (row ids do not). Returns (pid->slug, slug->pid)."""
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id, citation, sort_int, sort_suffix FROM provisions "
+        "WHERE instrument_id=? AND citation IS NOT NULL", (iid,))]
+    pfx = _lcp([r["citation"] for r in rows])
+    rows.sort(key=lambda r: (r["sort_int"] or 0, r["sort_suffix"] or "", r["id"]))
+    pid2slug, slug2pid = {}, {}
+    for r in rows:
+        cit = r["citation"]
+        pin = cit[len(pfx):] if pfx and cit.startswith(pfx) else cit
+        base = _slugify_pin(pin)
+        s, n = base, 2
+        while s in slug2pid:                                  # deterministic disambiguator (unused today)
+            s, n = f"{base}-{n}", n + 1
+        slug2pid[s] = r["id"]
+        pid2slug[r["id"]] = s
+    return pid2slug, slug2pid
+
+
 def _section_reader(conn, iid, sec):
     """Provisions-aware view: chapter-grouped section rail + the selected section's text.
     Returns (rail, sel) or (None, None) if this instrument has no provisions loaded."""
@@ -157,6 +202,9 @@ def _section_reader(conn, iid, sec):
         if r["kind"] == "recital":
             r["chap_label"] = "Recitals"
     _fill_incipits(conn, rows)                               # preview text for heading-less rails
+    pid2slug, _ = _slug_map(conn, iid)                        # stable deep-link slugs for the rail
+    for r in rows:
+        r["slug"] = pid2slug.get(r["id"])
     sel_id = sec if sec is not None else rows[0]["id"]
     # group into the left rail by chapter, marking the active section
     rail, cur = [], None
@@ -173,6 +221,7 @@ def _section_reader(conn, iid, sec):
         "WHERE p.id=?", (sel_id,)).fetchone()
     sel = dict(sel) if sel else None
     if sel:
+        sel["slug"] = pid2slug.get(sel_id)                    # canonical deep link for this provision
         sel["body"] = _format_body(sel.get("content"), sel.get("heading"))
         sel["nver"] = conn.execute("SELECT COUNT(*) FROM versions WHERE provision_id=?",
                                    (sel_id,)).fetchone()[0]
@@ -302,6 +351,9 @@ def _chapter_index(conn, iid, chap):
     # width (in ch) of the widest provision number in a grid — the section-number column is
     # sized to this so numbers and titles line up in a fixed spot regardless of number length.
     numw = lambda g: max((len(r["label"]) for r in g), default=5) + 1
+    pid2slug, _ = _slug_map(conn, iid)                        # stable deep-link slugs for the grid
+    for r in leaves:
+        r["slug"] = pid2slug.get(r["id"])
     tops = [r for r in rows if r["parent_id"] is None and r["kind"] in _CONTAINER_KINDS]
     if not tops:                                            # flat instrument — no chapter rail
         grid = sorted(leaves, key=key)
@@ -327,6 +379,24 @@ def _chapter_index(conn, iid, chap):
 @app.get("/instrument/{iid}", response_class=HTMLResponse)
 def instrument(request: Request, iid: int, tab: str = "cases",
                sec: int | None = None, chap: int | None = None):
+    """Instrument page. `?sec=<pid>` (internal row id) is kept as a backward-compatible
+    fallback; the canonical deep link is `/instrument/{iid}/{pinpoint}` (see below)."""
+    return _render_instrument(request, iid, tab, sec, chap)
+
+
+@app.get("/instrument/{iid}/{pinpoint}", response_class=HTMLResponse)
+def instrument_pinpoint(request: Request, iid: int, pinpoint: str, tab: str = "cases"):
+    """Deep-linkable provision URL — `/instrument/1/s-107`. Resolves a stable citation-derived
+    pinpoint slug to the provision (survives manifest rebuilds, unlike a row id). An unknown
+    pinpoint falls back to the instrument index rather than erroring."""
+    conn = _conn()
+    _, slug2pid = _slug_map(conn, iid)
+    pid = slug2pid.get(pinpoint) or slug2pid.get(pinpoint.lower())   # tolerate typed-case
+    return _render_instrument(request, iid, tab, pid, None)
+
+
+def _render_instrument(request: Request, iid: int, tab: str,
+                       sec: int | None, chap: int | None):
     conn = _conn()
     inst = conn.execute("SELECT * FROM instruments WHERE id=?", (iid,)).fetchone()
     has_prov = bool(inst) and _has_provisions(conn) and conn.execute(

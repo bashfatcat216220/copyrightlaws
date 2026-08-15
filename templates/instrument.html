@@ -7,8 +7,8 @@
   {% elif view == 'index' and ci and ci.sel_chap %} › {{ ci.sel_chap.label }}{% endif %}
   {% else %}—{% endif %}{% endblock %}
 
-{% macro practice_panel(tab, cases, amendments, sec_id) %}
-  {% set q = '?sec=' ~ sec_id ~ '&' if sec_id else '?' %}
+{% macro practice_panel(tab, cases, amendments, sec_slug, iid) %}
+  {% set q = ('/instrument/' ~ iid ~ '/' ~ sec_slug ~ '?') if sec_slug else '?' %}
   <aside class="practice">
     <nav class="tabbar">
       <a href="{{ q }}tab=cases" class="{{ 'active' if tab != 'history' }}">Cases · {{ cases|length }}</a>
@@ -83,7 +83,7 @@
     {% if vintage_note %}<div class="flag warn" style="margin:0 0 14px;">{{ vintage_note }}</div>{% endif %}
     <div class="secgrid" style="--numw: {{ ci.numw }}ch;">
       {% for s in ci.grid %}
-        <a class="secitem" href="/instrument/{{ inst.id }}?sec={{ s.id }}">
+        <a class="secitem" href="{% if s.slug %}/instrument/{{ inst.id }}/{{ s.slug }}{% else %}/instrument/{{ inst.id }}?sec={{ s.id }}{% endif %}">
           <span class="sn">{{ s.label }}</span>
           {% if s.heading %}<span class="st">{{ s.heading }}</span>
           {% elif s.incipit %}<span class="st incipit">{{ s.incipit }}</span>
@@ -103,7 +103,7 @@
     {% for grp in rail %}
       <div class="secrail-chap">{{ grp.chap_label or 'Provisions' }}</div>
       {% for s in grp.sections %}
-        <a class="secrow {{ 'active' if s.active }}" href="/instrument/{{ inst.id }}?sec={{ s.id }}">
+        <a class="secrow {{ 'active' if s.active }}" href="{% if s.slug %}/instrument/{{ inst.id }}/{{ s.slug }}{% else %}/instrument/{{ inst.id }}?sec={{ s.id }}{% endif %}">
           <span class="secnum">{{ s.label }}</span>
           {% if s.heading %}<span class="secttl">{{ s.heading }}</span>
           {% elif s.incipit %}<span class="secttl incipit">{{ s.incipit }}</span>
@@ -162,7 +162,7 @@
     </div>
   </section>
 
-  {{ practice_panel(tab, cases, amendments, sel.id) }}
+  {{ practice_panel(tab, cases, amendments, sel.slug, inst.id) }}
 </div>
 
 {% else %}
@@ -187,7 +187,7 @@
         RETRIEVED&nbsp; {{ ver.retrieved_at }}</div>{% endif %}
     </div>
   </section>
-  {{ practice_panel(tab, cases, amendments, none) }}
+  {{ practice_panel(tab, cases, amendments, none, inst.id) }}
 </div>
 {% endif %}
 {% endblock %}
