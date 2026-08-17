@@ -56,7 +56,8 @@ def source_tombstone_citations(xml_path: str) -> set[str]:
     """Citations the SOURCE artifact marks fully repealed (Status attr / dotted body /
     empty stub with a keyed repeal notice), per the fixed detector in ingest_clml."""
     mod = _load_ingest_parse()
-    _, records = mod.parse(xml_path)
+    parsed = mod.parse(xml_path)          # (title, records) pre-Wave-C, (title, records, effects) after
+    records = parsed[1]
     return {r["citation"] for r in records if r.get("status") == "repealed"}
 
 
