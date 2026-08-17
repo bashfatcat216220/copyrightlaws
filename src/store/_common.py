@@ -159,6 +159,54 @@ def _store_version(conn, iid, provid, r, *, source_url, point_in_time, fts_title
     return outcome
 
 
+def store_pinned_version(conn, iid: int, provid: int, citation: str, content: str, *,
+                         source_url: str, point_in_time: str, version_label: str,
+                         fts_title: str, is_authentic: int, is_consolidated: int,
+                         is_official_language: int = 1) -> str:
+    """ADDITIVE pinned layer (Wave D, 2f): store a historical/baseline MANIFESTATION of a
+    provision at its own point_in_time WITHOUT touching is_current — the working text (eCFR /
+    EU consolidated) keeps the reader; the pinned layer lands in History + search. Contrast
+    `_store_version`, which promotes to current. Idempotent by content at the pit slot; a
+    re-run after a parser fix updates the slot in place. REFUSES a slot owned by the live
+    current layer (that would clobber the working text — pick a different point_in_time).
+    NEVER originates text; requires a non-NULL point_in_time (a pinned layer without a date
+    is meaningless)."""
+    if not point_in_time:
+        raise SystemExit("store_pinned_version requires an explicit point_in_time")
+    if not content:
+        raise SystemExit(f"refusing to store an empty pinned version for {citation}")
+    digest = sha256(content)
+    slot = conn.execute(
+        "SELECT id, content_sha256, is_current FROM versions WHERE instrument_id=? AND "
+        "provision_id=? AND point_in_time IS ? AND language='en'",
+        (iid, provid, point_in_time)).fetchone()
+    if slot and slot[2]:
+        raise SystemExit(f"pit slot {point_in_time} for {citation} holds the CURRENT working "
+                         "version — refusing to overwrite (choose a different point_in_time)")
+    if slot and slot[1] == digest:
+        return "unchanged"
+    if slot:                                   # re-run after a parser fix → update in place
+        conn.execute("UPDATE versions SET version_label=?, content=?, content_sha256=?, "
+                     "source_url=?, retrieved_at=?, is_official_language=?, is_consolidated=?, "
+                     "is_authentic=? WHERE id=?",
+                     (version_label, content, digest, source_url, now_iso(),
+                      is_official_language, is_consolidated, is_authentic, slot[0]))
+        vid = slot[0]
+        conn.execute("DELETE FROM versions_fts WHERE rowid=?", (vid,))
+    else:
+        cur = conn.execute(
+            "INSERT INTO versions (instrument_id, provision_id, version_label, point_in_time, "
+            "language, is_official_language, is_consolidated, is_authentic, content, "
+            "content_sha256, source_url, retrieved_at, is_current) "
+            "VALUES (?,?,?,?, 'en', ?, ?, ?, ?,?,?,?, 0)",
+            (iid, provid, version_label, point_in_time, is_official_language, is_consolidated,
+             is_authentic, content, digest, source_url, now_iso()))
+        vid = cur.lastrowid
+    conn.execute("INSERT INTO versions_fts (rowid, title, citation, body) VALUES (?,?,?,?)",
+                 (vid, fts_title, citation, content))
+    return "new"
+
+
 def run_ingest(db_path: str, inst: dict, rs: RecordSet, source_url: str, *,
                point_in_time: str | None = None, allow_corpus: bool = False,
                is_authentic: int = 1, is_consolidated: int = 1, is_official_language: int = 1,
