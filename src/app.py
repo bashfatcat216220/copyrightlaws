@@ -172,6 +172,30 @@ def _slug_map(conn, iid):
     return pid2slug, slug2pid
 
 
+def _chapter_slug_map(conn, iid):
+    """Stable slugs for the TOP-LEVEL container provisions (part/subpart/chapter/subchapter)
+    of one instrument — so the chapter rail (`?chap=<slug>`) survives a manifest rebuild the
+    same way pinpoint deep-links do. Prefers the citation-derived slug from _slug_map (every
+    container in the corpus carries a citation), falling back to a label-derived slug ('Chapter
+    1' → 'chapter-1'); collisions within the instrument get the deterministic -N disambiguator.
+    Returns (cid->slug, slug->cid)."""
+    pid2slug, _ = _slug_map(conn, iid)
+    tops = [dict(r) for r in conn.execute(
+        "SELECT id, label, sort_int, sort_suffix FROM provisions "
+        "WHERE instrument_id=? AND parent_id IS NULL AND kind IN "
+        f"({','.join('?' * len(_CONTAINER_KINDS))})", (iid, *_CONTAINER_KINDS)).fetchall()]
+    tops.sort(key=lambda r: (r["sort_int"] or 0, r["sort_suffix"] or "", r["id"]))
+    cid2slug, slug2cid = {}, {}
+    for r in tops:
+        base = pid2slug.get(r["id"]) or _slugify_pin(r["label"] or "")   # citation slug, else label
+        s, n = base, 2
+        while s in slug2cid:                                  # deterministic disambiguator
+            s, n = f"{base}-{n}", n + 1
+        slug2cid[s] = r["id"]
+        cid2slug[r["id"]] = s
+    return cid2slug, slug2cid
+
+
 def _section_reader(conn, iid, sec):
     """Provisions-aware view: chapter-grouped section rail + the selected section's text.
     Returns (rail, sel) or (None, None) if this instrument has no provisions loaded."""
@@ -330,7 +354,12 @@ def _chapter_index(conn, iid, chap):
     """KM 'View 1' — chapter rail + section grid. Groups an instrument's leaf provisions
     under their TOP-LEVEL container ('chapter'); returns the selected chapter's grid. For a
     flat instrument (no containers — e.g. a treaty) there is no chapter rail: the grid is all
-    leaves. `chap` selects a chapter (defaults to the first)."""
+    leaves. `chap` selects a chapter (defaults to the first) — it may be a stable slug string
+    ('ch-1') OR, for backward compatibility, a legacy int container row id."""
+    cid2slug, slug2cid = _chapter_slug_map(conn, iid)         # stable chapter-rail slugs
+    if isinstance(chap, str):                                 # resolve a slug → container id …
+        chap = slug2cid.get(chap) or slug2cid.get(chap.lower()) or \
+            (int(chap) if chap.isdigit() else None)           # … tolerating a legacy int id ('5')
     rows = [dict(r) for r in conn.execute(
         "SELECT id, parent_id, kind, label, heading, sort_int, sort_suffix, citation "
         "FROM provisions WHERE instrument_id=?", (iid,))]
@@ -366,7 +395,8 @@ def _chapter_index(conn, iid, chap):
     chapters = []
     for tc in sorted(tops, key=key):
         secs = sorted(groups.get(tc["id"], []), key=key)
-        chapters.append({"id": tc["id"], "label": tc["label"], "heading": tc["heading"],
+        chapters.append({"id": tc["id"], "slug": cid2slug.get(tc["id"]),
+                         "label": tc["label"], "heading": tc["heading"],
                          "n": len(secs),
                          "range": f"{secs[0]['label']}–{secs[-1]['label']}" if secs else ""})
     sel = chap if (chap in groups) else (chapters[0]["id"] if chapters else None)
@@ -378,9 +408,11 @@ def _chapter_index(conn, iid, chap):
 
 @app.get("/instrument/{iid}", response_class=HTMLResponse)
 def instrument(request: Request, iid: int, tab: str = "cases",
-               sec: int | None = None, chap: int | None = None):
+               sec: int | None = None, chap: str | None = None):
     """Instrument page. `?sec=<pid>` (internal row id) is kept as a backward-compatible
-    fallback; the canonical deep link is `/instrument/{iid}/{pinpoint}` (see below)."""
+    fallback; the canonical deep link is `/instrument/{iid}/{pinpoint}` (see below).
+    `?chap=<slug>` selects a chapter by its stable slug ('ch-1'); a legacy int id still works
+    (both resolved in _chapter_index)."""
     return _render_instrument(request, iid, tab, sec, chap)
 
 
@@ -396,7 +428,7 @@ def instrument_pinpoint(request: Request, iid: int, pinpoint: str, tab: str = "c
 
 
 def _render_instrument(request: Request, iid: int, tab: str,
-                       sec: int | None, chap: int | None):
+                       sec: int | None, chap: str | None):
     conn = _conn()
     inst = conn.execute("SELECT * FROM instruments WHERE id=?", (iid,)).fetchone()
     has_prov = bool(inst) and _has_provisions(conn) and conn.execute(
@@ -446,6 +478,12 @@ def alerts(request: Request):
         "LEFT JOIN versions ov ON ov.id=a.old_version "
         "LEFT JOIN provisions p ON p.id=nv.provision_id "
         "ORDER BY a.notified_at DESC, a.id DESC")]
+    slug_cache = {}                                           # one _slug_map per distinct instrument, not per row
+    for row in rows:
+        iid = row["iid"]
+        if iid not in slug_cache:
+            slug_cache[iid], _ = _slug_map(conn, iid)
+        row["slug"] = slug_cache[iid].get(row["pid"])         # stable deep-link slug; None → template ?sec= fallback
     return templates.TemplateResponse(request, "alerts.html",
                                       _ctx(conn, active_nav="alerts", alerts=rows))
 

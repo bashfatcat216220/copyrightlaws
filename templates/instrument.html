@@ -62,7 +62,7 @@
   <nav class="chaprail">
     <div class="rhdr">Chapters</div>
     {% for c in ci.chapters %}
-      <a class="chaprow {{ 'active' if c.id == ci.selected }}" href="/instrument/{{ inst.id }}?chap={{ c.id }}">
+      <a class="chaprow {{ 'active' if c.id == ci.selected }}" href="/instrument/{{ inst.id }}?chap={% if c.slug %}{{ c.slug }}{% else %}{{ c.id }}{% endif %}">
         <span style="flex:1; min-width:0;">
           <span class="ct">{{ c.label }}{% if c.heading %} · {{ c.heading }}{% endif %}</span>
           <div class="cm">{{ c.range }} · {{ c.n }} SECTION{{ '' if c.n == 1 else 'S' }}</div>

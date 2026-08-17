@@ -17,7 +17,7 @@
     {% for a in alerts %}
       <div class="alertrow">
         <div>
-          <a class="acite" href="/instrument/{{ a.iid }}?sec={{ a.pid }}">{{ a.citation or a.official_citation }}</a>
+          <a class="acite" href="{% if a.slug %}/instrument/{{ a.iid }}/{{ a.slug }}{% else %}/instrument/{{ a.iid }}?sec={{ a.pid }}{% endif %}">{{ a.citation or a.official_citation }}</a>
           <div class="arule">{{ a.rule }}</div>
         </div>
         <div>
