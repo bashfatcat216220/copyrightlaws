@@ -40,6 +40,18 @@ def is_tombstone(el, content: str | None) -> bool:
         return True
     return bool(content and DOTTED_TOMBSTONE.fullmatch(content))
 
+
+_DOTS_ONLY_HEADING = re.compile(r"[.\s]*(\.\s*){4,}\.?\s*")
+
+
+def _heading(t: str | None) -> str | None:
+    """A source <Title> that is only a dotted leader (". . . .") is the source's
+    "no heading" marker for a repealed provision (e.g. s.265, whose real repeal notice
+    lives in the body), NOT a real heading. Store NULL so the reader rails the provision's
+    repeal-notice incipit instead of a wall of dots."""
+    return None if (t and _DOTS_ONLY_HEADING.fullmatch(t.strip())) else t
+
+
 INSTRUMENT = dict(jurisdiction="GB", type="statute", official_citation="CDPA 1988",
                   ext_id_scheme="ELI", ext_id="ukpga/1988/48",
                   title="Copyright, Designs and Patents Act 1988")
@@ -224,7 +236,7 @@ def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
                 si, su = ordinal(re.sub(r"[^0-9]", "", label), sib)
                 role = "schedule" if in_sched else "enacting"
                 lid = add(parent_local=parent_local, kind=kind, label=label,
-                          heading=_txt(_child(c, "Title")), sort_int=si, sort_suffix=su,
+                          heading=_heading(_txt(_child(c, "Title"))), sort_int=si, sort_suffix=su,
                           role=role, citation=cite, content=None)
                 walk(c, lid, cite, None, [], None, in_sched, sched_no)
             elif name == "Schedule":
@@ -240,7 +252,7 @@ def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
                 label = f"Schedule {num}"
                 cite = f"CDPA 1988 {label}"
                 si, su = ordinal(num, sib)
-                heading = _txt(c.find(".//{*}Title"))
+                heading = _heading(_txt(c.find(".//{*}Title")))
                 lid = add(parent_local=parent_local, kind="schedule", label=label, heading=heading,
                           sort_int=si, sort_suffix=su, role="schedule", citation=cite, content=None)
                 walk(c, lid, cite, None, [], None, True, num)
@@ -272,7 +284,7 @@ def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
                             status="repealed" if is_tombstone(c, text) else "in_force")
                     continue
                 walk(c, parent_local, container_cite, sec_cite, subpath,
-                     _txt(_child(c, "Title")), in_sched, sched_no)
+                     _heading(_txt(_child(c, "Title"))), in_sched, sched_no)
             elif name == "P1":
                 sib += 1
                 # normalize the section number — some CDPA point-in-time XML carries a trailing
