@@ -21,18 +21,55 @@ _Last updated: 2026-08-16._
 > surfacing so single-block schedules like 37 CFR App. A / CA Schedule I appear in the rail, not only
 > via search/deep-link). Real bug logged: UK CDPA `has_unapplied_effects` never set (SI 2026/103).
 
+> **Waves C + D + E — COMPLETE & LOADED to BOTH DBs, 2026-08-16 (3 fable agents, worktree-isolated).**
+> The three remaining 2f/2g audit waves ran as isolated fable agents (each validated on a sqlite-backup
+> clone; central load gated + applied by the orchestrator; **Bing approved the CA/AU/UK authority relabels**
+> at the gate). Merged to `main` locally (commits `4f25ad6` C / `7a03b3d` D / `6ae60f8` E + merges) — **NOT
+> pushed**. Corpus now **14,362 provisions · 6,776 versions · 91 alerts** (monitor NOT run — all additions
+> are cross-manifestation/back-matter, CLAUDE rule 6). Integrity clean (0 dup citations, 0 multi-current,
+> 0 blank operative bodies, 0 junk, FK + integrity_check ok); pytest 6/6; app re-verified on :8021 (14 pages
+> 200, caveat renders). Both DBs at parity.
+> - **Wave C** (metadata/honesty + the real bug): CA→`official`, AU→`official`, UK CDPA→`consolidated`
+>   (metadata-only, no CDPA re-ingest); 37 C.F.R. 11 `[Reserved]` provisions → `status='reserved'` (new
+>   status added via migration `003_wave_c.py` rebuilding the CHECK) + title → "Parts 200–235"; NL ~2012 /
+>   IT ~2003 vintage caveats + IN instrument note (app-level). **THE BUG FIXED:** `ingest_clml.py` now parses
+>   `ukm:UnappliedEffects` — found **two** live `RequiresApplied` effects (SI 2026/103 art.4(1)→Pt II; TCE
+>   Act 2007 Sch 23→repeal of Sch 3 para 17) → `has_unapplied_effects=1` on 76/1597 current versions; UI
+>   surfaces a "not fully up to date" flag. Durable in the ingest (self-clearing on future refresh).
+> - **Wave D** (authentic-text ingests, real new law): InfoSoc +15 authentic original articles (pit
+>   2001-06-22, `is_authentic=1`, additive — consolidated current + recitals untouched); Term Art 10a
+>   authentic insertion from Dir 2011/77 (pit 2011-10-11; sha256 matches the consolidation — clean
+>   cross-manifestation proof); 37 C.F.R. +211 GPO annual-baseline versions (pit 2025-07-01, official
+>   edition, alongside the eCFR working text); `amendments` table populated (+3 provenance rows, monitor
+>   NOT fed). **Refused to fabricate** the full amended-state text for InfoSoc Arts 5/12 & Term Arts 1/3/10
+>   (amending acts quote only replaced points → recorded as `amendments` rows, not originated text — prime
+>   rule 1). New artifacts retained in `spike/artifacts/` (GPO CFR XML, Dir 2011/77 & 2017/1564 OJ HTML).
+> - **Wave E** (LOW cleanups + reader surfacing): EU codification annexes 21/23/24 (+6 `schedule`
+>   provisions); ES RDL 1/1996 wrapper (+4: Single Article / Single Repeal / Single Final); CDPA Schedule 8
+>   repeals table attached (4,898 chars, targeted backfill — no full CDPA re-ingest, rule 7); footnote-bleed
+>   trims (Berne App. Art VI 2,377→1,037; Rome Art 34; WCT Art 25; WPPT Art 33 — apparatus only, treaty text
+>   intact, all in-place); JP Chapter VIII sort fixed (`_jp_ordinal`: 119,120,120-2,121,121-2,122,122-2,123,124);
+>   View-1 "Schedules" group added to `_chapter_index`; WCT/WPPT agreed-statement dedupe (−7 dup rows → 9/10).
+>
+> **Still pending (NOT done — carry forward):** (1) **SG relabel** — held; needs a human to open the SSO page
+> (sso.agc.gov.sg) and read its authority statement (scripted fetch 403s). (2) **Documented-only, no change**:
+> `is_authentic=1` on translations vs `is_official_language=0` (schema-semantics call for Bing); the empty EU
+> `amendments` table is now populated (D). (3) Cosmetic: reserved/no-current-version provisions spuriously show
+> the "not authentic" flag (NULL falsy-inverted); CDPA View-1 Schedules grid lacks per-schedule sub-headers.
+> (4) **Not pushed to origin** — local `main` is ahead by the 3 waves + merges.
+
 > **Migration 002 (legal-authority axis) — APPLIED & backfilled (2026-08-14, last commit `68cb6e0`).
 > Per-instrument `authority` (binding|persuasive|precedent, set by PROCESS not publisher/`type`),
 > `positive_law`, `source_edition`, `court_level`. Backfilled on BOTH DBs: 32 non-case instruments
 > = `binding` (0 NULL), cases = `precedent`. Attorney-driven (Copyright Office makes both binding
 > 37 C.F.R. rules AND non-binding guidance). See CLAUDE.md prime rule 3a.
 
-## NEXT UP — remaining 2f/2g audit waves C, D, E (do in this order)
+## 2f/2g audit waves C, D, E — ✅ DONE (2026-08-16, see the completion banner above)
 
-_Source of detail: `AUDIT-FINDINGS-2026-08-16.md`. Waves A+B (the HIGH+MED missing back-matter)
-are DONE + pushed (`62c6d68`). These three remain. Discipline: each item scratch-validated on a
-sqlite-backup clone before central load (CLAUDE rule 9); risky writes gate on Bing's review (prime
-rule 2); use fable agents READ-ONLY for audits/verification, a write-capable agent for ingests._
+_All three waves are LOADED to both DBs (details in the banner at the top). The per-item breakdown below
+is retained as the RECORD of what was done — it is no longer a backlog. Only the "Still pending" items in
+the completion banner remain (SG relabel, the documented-only schema-semantics call, two cosmetic items,
+and the push). Source of detail: `AUDIT-FINDINGS-2026-08-16.md`._
 
 ### Wave C — 2f relabels + honesty fixes (metadata only, NO new law text)
 - **CA (id 6)** `source_edition` finding_aid → **official** (Justice Laws is official for evidentiary
