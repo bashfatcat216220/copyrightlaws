@@ -53,6 +53,16 @@ LEVEL = {
 
 HEAD = re.compile(r'<p\b[^>]*class="(ActHead[2-5])"[^>]*>(.*?)</p>', re.S)
 
+# The Schedule (Oath and Affirmation, s. 144) is the Act's only Schedule — an OPERATIVE
+# ActHead1 block near anchor _Toc226988647. It is NOT an ActHead2-5, so the HEAD loop never
+# touches it; we capture it separately AND bound it hard so it stops before the compilation
+# Endnotes (editorial apparatus that must stay excluded — see CLAUDE ingest rule 3).
+SCHED_START = re.compile(
+    r'<p\b[^>]*class="ActHead1"[^>]*>.*?<span class="CharChapNo">\s*The Schedule\s*</span>', re.S)
+# End of the Schedule = the Endnotes block. In the artifact this is the <p class="ENotesHeading1">
+# ("Endnotes") that immediately precedes "Endnote 1—About the endnotes". Bound on either.
+SCHED_END = re.compile(r'<p\b[^>]*class="ENotesHeading1"|Endnote\s*1\s*[—-]\s*About the endnotes', re.S)
+
 
 def _text(frag: str) -> str:
     """Strip tags/entities and collapse whitespace (also the U+2011 non-breaking hyphen)."""
@@ -70,6 +80,43 @@ def _part_token(no_text: str) -> str:
     """'Part I' / 'Part IVA' → 'I' / 'IVA' (drop the leading 'Part'/'Division' word)."""
     t = re.sub(r"^(Part|Division|Subdivision)\b", "", no_text).strip()
     return t or no_text
+
+
+def _add_schedule(html: str, rs: RecordSet, sort_base: int) -> None:
+    """Capture 'The Schedule' — Oath and Affirmation (Section 144), OPERATIVE (s. 144 requires the
+    oath be 'in accordance with the form ... in the Schedule to this Act'). Bounded from the
+    ActHead1 'The Schedule' heading up to the Endnotes block so the editorial endnotes NEVER bleed
+    in. Modelled as a kind='schedule' container (role='schedule', TRIPS-annex precedent) with two
+    kind='schedule_para' children — the Oath and the Affirmation forms — carrying verbatim text."""
+    sm = SCHED_START.search(html)
+    if not sm:
+        return
+    em = SCHED_END.search(html, sm.end())
+    block = html[sm.start(): em.start() if em else len(html)]
+    body = _text(block)
+    if not body:
+        return
+    sched = rs.add(kind="schedule", label="The Schedule",
+                   heading="The Schedule — Oath and Affirmation (Section 144)",
+                   sort_int=sort_base, sort_suffix="", role="schedule",
+                   citation="Copyright Act 1968 (Australia) The Schedule", content=body)
+    # Decompose into the OATH and AFFIRMATION forms (the two headed sub-parts of the Schedule).
+    # Both markers are present verbatim in the block; if either is missing we keep only the
+    # container (never invent structure).
+    om = re.search(r"<p[^>]*><span>\s*OATH\s*</span></p>", block)
+    am = re.search(r"<p[^>]*><span>\s*AFFIRMATION\s*</span></p>", block)
+    if om and am and om.start() < am.start():
+        oath = _text(block[om.start():am.start()])
+        affirm = _text(block[am.start():])
+        if oath:
+            rs.add(parent_local=sched, kind="schedule_para", label="Oath",
+                   heading="Oath", sort_int=sort_base + 1, sort_suffix="", role="schedule",
+                   citation="Copyright Act 1968 (Australia) The Schedule — Oath", content=oath)
+        if affirm:
+            rs.add(parent_local=sched, kind="schedule_para", label="Affirmation",
+                   heading="Affirmation", sort_int=sort_base + 2, sort_suffix="", role="schedule",
+                   citation="Copyright Act 1968 (Australia) The Schedule — Affirmation",
+                   content=affirm)
 
 
 def parse(html_path: str) -> RecordSet:
@@ -122,6 +169,9 @@ def parse(html_path: str) -> RecordSet:
             label, cite = f"Subdivision {token}", f"Copyright Act 1968 (Australia) Subdiv {token} @{i}"
         container[kind] = rs.add(parent_local=parent, kind=kind, label=label, heading=heading,
                                  sort_int=si, sort_suffix=su, citation=cite)
+    # The Schedule is a top-level ActHead1 (not in the HEAD loop). Sort it AFTER every section
+    # (numeric sort_ints top out at s. 249) with a base beyond any real section number.
+    _add_schedule(html, rs, sort_base=100000)
     return rs
 
 

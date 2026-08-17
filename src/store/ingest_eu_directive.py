@@ -242,8 +242,77 @@ def parse_articles(h: str) -> list[dict]:
     return records
 
 
+# ── Annex ───────────────────────────────────────────────────────────────────────
+# Sort base for annex provisions: placed AFTER the articles (which sort in the 1..N
+# range). Mirrors the TRIPS-annex precedent's out-of-band base in `ingest_treaty`.
+_ANNEX_SORT_BASE = 10000
+# A top-level numbered annex point: <p class="oj-normal">(N)</p> — single/double-digit
+# only (lettered sub-points use "(a)", so they never match this).
+_ANNEX_NUM = re.compile(r'<p\b[^>]*class="(?:oj-)?normal"[^>]*>\s*\((\d+)\)\s*</p>')
+
+
+def parse_annex(h: str, short: str) -> list[dict]:
+    """Orphan-Works Annex (Article 3(2) minimum diligent-search sources).
+
+    Scoped to the MODERN EUR-Lex annex container `<div ... id="anx_N">…</div>` — the
+    ONLY shape carrying an addressable numbered-source list in this family. The codified
+    directives (Software/Rental/Term) instead put their annexes in `oj-doc-ti` heading
+    blocks (repealed-directive lists + correlation tables — a different, later wave); they
+    have no `anx_*` div, so this stage is inert for them and returns []. Database and
+    Enforcement (legacy OJ) have no annex at all.
+
+    Returns a list with one container dict (kind 'schedule') carrying `points`, each a
+    numbered sub-point dict (kind 'schedule_para'). Body text is verbatim from the fetched
+    page (prime rule 1); the leading '(N)' marker is dropped only because the citation
+    already carries the number. Segmentation is bounded to the annex div — it does not run
+    into the page footer/script block (which follows `<hr class="oj-doc-end">`)."""
+    dm = re.search(r'<div\b[^>]*id="(anx_\d+)"[^>]*>', h)
+    if not dm:
+        return []
+    body_start = dm.end()
+    # Bound the annex to its own container: stop at the document-end rule (which precedes
+    # the <script> footer). Never let it bleed into the page scripts/footer.
+    end = h.find('<hr', body_start)
+    if end == -1:
+        end = h.find('</body>', body_start)
+    if end == -1:
+        end = len(h)
+    region = h[body_start:end]
+    # Strip any script/style defensively before working with the fragment.
+    region = re.sub(r"<script\b[^>]*>.*?</script>", " ", region, flags=re.S)
+    region = re.sub(r"<style\b[^>]*>.*?</style>", " ", region, flags=re.S)
+
+    # Container heading is the annex title paragraph; intro is the first oj-normal line.
+    intro_m = re.search(r'<p\b[^>]*class="(?:oj-)?normal"[^>]*>(.*?)</p>', region, re.S)
+    intro = _clean(intro_m.group(1)) if intro_m else ""
+
+    # Split on the top-level numbered markers; each point body runs to the next marker.
+    marks = [(m.group(1), m.start()) for m in _ANNEX_NUM.finditer(region)]
+    if not marks:
+        return []
+    points: list[dict] = []
+    for i, (num, pos) in enumerate(marks):
+        seg_end = marks[i + 1][1] if i + 1 < len(marks) else len(region)
+        text = _clean(region[pos:seg_end])
+        # Drop the redundant leading "(N)" marker; keep the rest verbatim.
+        text = re.sub(r"^\(\d+\)\s*", "", text)
+        if text:
+            points.append(dict(num=int(num), text=text))
+    if not points:
+        return []
+
+    # Container content = intro line + the numbered points (verbatim), so the schedule row
+    # is self-contained and searchable even without expanding its children.
+    container_parts = [intro] if intro else []
+    for p in points:
+        container_parts.append(f"({p['num']}) {p['text']}")
+    container_text = "\n".join(container_parts).strip() or None
+    return [dict(heading="Annex", intro=intro, content=container_text, points=points)]
+
+
 def parse(html_path: str, celex: str) -> RecordSet:
-    """Build a RecordSet: recitals (top-level) + chapters (containers) + articles."""
+    """Build a RecordSet: recitals (top-level) + chapters (containers) + articles
+    (+ the Annex, where the source carries an `anx_*` container — Orphan Works only)."""
     d = DIRECTIVES[celex]
     short = d["short_num"]
     h = open(html_path, encoding="utf-8").read()
@@ -275,6 +344,18 @@ def parse(html_path: str, celex: str) -> RecordSet:
         rs.add(kind="article", label=f"Article {token}", heading=art["heading"],
                sort_int=si, sort_suffix=su, role="enacting", parent_local=parent,
                citation=f"Directive {short} Art. {token}", content=art["content"] or None)
+
+    for ai, annex in enumerate(parse_annex(h, short)):
+        base = _ANNEX_SORT_BASE + ai * 100
+        container = rs.add(
+            kind="schedule", label="Annex", heading=annex["heading"],
+            sort_int=base, sort_suffix="", role="schedule",
+            citation=f"Directive {short} Annex", content=annex["content"])
+        for p in annex["points"]:
+            rs.add(kind="schedule_para", label=f"Annex ({p['num']})", heading=None,
+                   sort_int=base + p["num"], sort_suffix="", role="schedule",
+                   parent_local=container,
+                   citation=f"Directive {short} Annex ({p['num']})", content=p["text"])
     return rs
 
 

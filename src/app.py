@@ -209,22 +209,45 @@ def _section_reader(conn, iid, sec):
     # articles, so they are unaffected.
     NOTC = ("NOT ({a}.kind='section' AND EXISTS (SELECT 1 FROM provisions ch "
             "WHERE ch.parent_id={a}.id AND ch.kind='article'))")
-    n = conn.execute("SELECT COUNT(*) FROM provisions WHERE instrument_id=? "
-                     f"AND kind IN {LEAVES} AND {NOTC.format(a='provisions')}", (iid,)).fetchone()[0]
+    # The INVERSE for back-matter (2f/2g audit): a 'schedule' container with NO children is a
+    # TERMINAL leaf holding its own text (37 C.F.R. Part 202 App. A, CA Schedule I + repealed
+    # tombstones, JP per-act supplementary blocks) — rail it as clickable. One WITH children
+    # stays a group header only (its paragraphs already rail under its label; no double-listing).
+    # The test is "no children AT ALL", not "no schedule_para children" — CDPA Sch ZA1/5A nest
+    # schedule > part > schedule_para, and must stay containers. Require a current version so a
+    # bodiless shell (CDPA Schedule 8) doesn't rail as an empty clickable row.
+    SCHED_LEAF = ("({a}.kind='schedule' "
+                  "AND NOT EXISTS (SELECT 1 FROM provisions ch WHERE ch.parent_id={a}.id) "
+                  "AND EXISTS (SELECT 1 FROM versions v "
+                  "            WHERE v.provision_id={a}.id AND v.is_current=1))")
+    LEAF_WHERE = f"(({{a}}.kind IN {LEAVES} AND {NOTC}) OR {SCHED_LEAF})"
+    n = conn.execute(
+        "SELECT COUNT(*) FROM provisions p WHERE p.instrument_id=? AND "
+        + LEAF_WHERE.format(a='p'), (iid,)).fetchone()[0]
     if not n:
         return None, None
+    # ORDER BY: a top-level childless schedule has no parent (chapter slot NULL would sort it
+    # FIRST) — sort it by its OWN sort_int in the chapter slot instead, so its high sort_int
+    # (10000+) places it after the body and interleaved chronologically with sibling
+    # schedule-with-children groups (JP). Non-schedule rows keep the existing c.sort_int order.
     rows = [dict(r) for r in conn.execute(
         "SELECT s.id, s.label, s.heading, s.citation, s.kind, "
         "  c.label AS chap_label, c.sort_int AS c_si, c.sort_suffix AS c_su "
         "FROM provisions s LEFT JOIN provisions c ON c.id=s.parent_id "
-        f"WHERE s.instrument_id=? AND s.kind IN {LEAVES} AND {NOTC.format(a='s')} "
-        "ORDER BY c.sort_int, c.sort_suffix COLLATE BINARY, "
+        "WHERE s.instrument_id=? AND " + LEAF_WHERE.format(a='s') +
+        " ORDER BY CASE WHEN s.kind='schedule' AND s.parent_id IS NULL THEN s.sort_int "
+        "               ELSE c.sort_int END, "
+        "         c.sort_suffix COLLATE BINARY, "
         "         s.sort_int, s.sort_suffix COLLATE BINARY", (iid,))]
     # Recitals (kind='recital') are top-level (no chapter) and precede the articles — rail
     # them as their own group rather than under the null-chapter "Sections" bucket.
+    # Likewise a PARENTLESS childless schedule groups under a literal "Schedules" header
+    # (a parented one, e.g. 37 C.F.R. App. A, groups under its parent's label as usual).
     for r in rows:
         if r["kind"] == "recital":
             r["chap_label"] = "Recitals"
+        elif r["kind"] == "schedule" and not r["chap_label"]:
+            r["chap_label"] = "Schedules"
     _fill_incipits(conn, rows)                               # preview text for heading-less rails
     pid2slug, _ = _slug_map(conn, iid)                        # stable deep-link slugs for the rail
     for r in rows:
@@ -375,8 +398,19 @@ def _chapter_index(conn, iid, chap):
 
     # sections that contain 'article' children are containers (JP chapter>section>article), not leaves
     _art_parents = {r["parent_id"] for r in rows if r["kind"] == "article" and r["parent_id"]}
-    leaves = [r for r in rows if r["kind"] in _LEAF_KINDS
-              and not (r["kind"] == "section" and r["id"] in _art_parents)]
+    # the inverse for back-matter (mirrors _section_reader's SCHED_LEAF): a 'schedule' with NO
+    # children of any kind is a terminal leaf holding its own text (37 CFR App. A, CA Schedule
+    # I–III, JP per-act supplementary blocks) — one WITH children (incl. CDPA ZA1/5A's
+    # schedule>part>schedule_para nesting) stays a container. Bodiless shells (CDPA Schedule 8,
+    # no current version) are excluded so the grid never lists an empty entry.
+    _parents = {r["parent_id"] for r in rows if r["parent_id"]}
+    _sched_ids = [r["id"] for r in rows if r["kind"] == "schedule" and r["id"] not in _parents]
+    _sched_bodied = {pid for (pid,) in conn.execute(
+        "SELECT provision_id FROM versions WHERE is_current=1 AND provision_id IN "
+        f"({','.join('?' * len(_sched_ids))})", _sched_ids)} if _sched_ids else set()
+    leaves = [r for r in rows if (r["kind"] in _LEAF_KINDS
+              and not (r["kind"] == "section" and r["id"] in _art_parents))
+              or (r["kind"] == "schedule" and r["id"] in _sched_bodied)]
     # width (in ch) of the widest provision number in a grid — the section-number column is
     # sized to this so numbers and titles line up in a fixed spot regardless of number length.
     numw = lambda g: max((len(r["label"]) for r in g), default=5) + 1

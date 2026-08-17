@@ -36,6 +36,24 @@ USC_TITLE = "17"
 INSTRUMENT = dict(jurisdiction="US", type="statute", official_citation="17 U.S.C.",
                   ext_id_scheme="USC", ext_id="t17")
 
+# ── 1976 Act "Transitional and Supplementary Provisions" (Pub. L. 94-553, Title I) ──
+# §§ 102–115 are OPERATIVE UNCODIFIED law (effective dates, savings, lost/expired
+# copyrights, appropriations, separability). USLM carries them NOT in the codified
+# section tree but reproduced inside statutory <note>s — the actual statutory words sit
+# in a <quotedContent origin="/us/pl/94/553/tI/sNNN">. `SKIP` (above) drops ALL notes to
+# keep the ~625 editorial notes out of the operative body; we do NOT touch that. Instead a
+# SEPARATE, surgical pass (transitional_records) targets ONLY these §§102–115 by their
+# `origin` attribute — the machine-readable provenance selector, robust across refreshes.
+#
+# Scoped by exact origin match so nothing adjacent bleeds in: the run is 102..115 but this
+# release only reproduces 102,103,104,106,107,108,109,110,112,114,115 (105/111/113 are not
+# carried in the artifact at all — no fake law: we capture what is present, nothing more).
+TRANS_ORIGIN_RE = re.compile(r"^/us/pl/94/553/tI/s(1(?:0[2-9]|1[0-5]))$")
+TRANS_CONTAINER_CITE = "17 U.S.C. Transitional and Supplementary Provisions"
+TRANS_CONTAINER_HEADING = ("Transitional and Supplementary Provisions "
+                           "(Pub. L. 94-553, Title I, §§ 102–115)")
+TRANS_SORT_BASE = 90000  # file AFTER the codified body (§§101–1511) in provision order
+
 
 def local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
@@ -139,7 +157,71 @@ def parse(xml_path: str) -> tuple[str, list[dict]]:
                 walk(c, parent_local, sec_cite, subpath)
 
     walk(root, None, None, [])
+    _append_transitional(root, records, add)
     return (title_heading or "Copyrights"), records
+
+
+def _note_text(note_el) -> str:
+    """Full verbatim text of a statutory <note>: the introductory credit line
+    ('Pub. L. 94-553, title I, § NNN, Oct. 19, 1976, 90 Stat. …, provided that:') AND the
+    reproduced statutory words inside <quotedContent>. Unlike _operative_text this does NOT
+    apply SKIP (which exists to keep notes/quoted material OUT of the codified body) — here
+    the note IS the operative uncodified provision, captured verbatim. The note's own
+    <heading> is stored separately as the provision heading, so it is excluded from the body."""
+    parts: list[str] = []
+
+    def rec(e):
+        if local(e.tag) == "heading":
+            return  # captured as the provision heading, not repeated in the body
+        if e.text and e.text.strip():
+            parts.append(e.text.strip())
+        for c in e:
+            rec(c)
+            if c.tail and c.tail.strip():
+                parts.append(c.tail.strip())
+
+    rec(note_el)
+    return " ".join(parts)
+
+
+def _append_transitional(root, records: list[dict], add) -> None:
+    """SURGICAL capture of Pub. L. 94-553, Title I, §§ 102–115 (the 1976 Act transitional
+    and supplementary provisions) — operative uncodified law. Selects ONLY <note>s whose
+    reproduced text carries origin="/us/pl/94/553/tI/s1{02..15}"; captures each such note
+    verbatim as a schedule_para. Leaves the codified body and every other note untouched."""
+    parents = {c: p for p in root.iter() for c in p}
+    seen: set[str] = set()
+    found: list[tuple[int, str, str, str]] = []  # (sec, num, heading, body)
+    for el in root.iter():
+        if local(el.tag) != "quotedContent":
+            continue
+        m = TRANS_ORIGIN_RE.match(el.get("origin", "") or "")
+        if not m:
+            continue
+        num = m.group(1)
+        if num in seen:            # one provision per section (idempotent within a parse)
+            continue
+        # walk up to the enclosing statutory <note> (its intro line + quoted words = the text)
+        note = el
+        while note is not None and local(note.tag) != "note":
+            note = parents.get(note)
+        if note is None:
+            continue
+        seen.add(num)
+        h = note.find("./{*}heading")
+        heading = " ".join("".join(h.itertext()).split()) if h is not None else None
+        found.append((int(num), num, heading, _note_text(note)))
+
+    if not found:
+        return
+    found.sort(key=lambda t: t[0])
+    cid = add(parent_local=None, kind="schedule", label="Transitional and Supplementary Provisions",
+              heading=TRANS_CONTAINER_HEADING, sort_int=TRANS_SORT_BASE, sort_suffix="",
+              role="schedule", citation=TRANS_CONTAINER_CITE, content=None)
+    for sec, num, heading, body in found:
+        add(parent_local=cid, kind="schedule_para", label=f"§ {num}", heading=heading,
+            sort_int=TRANS_SORT_BASE + sec, sort_suffix="", role="schedule",
+            citation=f"17 U.S.C. Trans. & Supp. Prov. § {num}", content=body or None)
 
 
 # ── DB writers (idempotent) ─────────────────────────────────────────────────

@@ -2,9 +2,26 @@
 
 > Status comes from THIS file, read fresh. Do not answer "where are we" from memory.
 
-_Last updated: 2026-08-15._
+_Last updated: 2026-08-16._
 
-> **Migration 002 (legal-authority axis) — APPLIED & backfilled (2026-08-14, last commit `68cb6e0`).**
+> **Back-matter additions (2f/2g audit → Waves A+B) — LOADED to BOTH DBs, 2026-08-16.**
+> A fresh read-only audit (7 fable agents by jurisdiction group) → `AUDIT-FINDINGS-2026-08-16.md`
+> asked two questions across all 32 instruments: (2f) are we holding the authoritative edition, and
+> (2g) is every appendix/schedule/annex/addenda/transitional provision captured. **Waves A+B ingested
+> the 8 real missing back-matter items** (~+260 provisions; corpus now ~14,359): 37 C.F.R. Part 202
+> App. A & B, EU Orphan Works Annex, KR Addenda (부칙), JP Supplementary Provisions (附則), 17 U.S.C.
+> 1976-Act Transitional & Supplementary Provisions (Pub. L. 94-553 §§102–115), DE UrhG Annex to §61a
+> (also fixed a §143 annex-bleed bug), CA Schedule I + II/III tombstones, AU "The Schedule" (oath).
+> All verbatim from retained artifacts, modeled as `kind='schedule'`/`schedule_para`, `role='schedule'`
+> (TRIPS-annex precedent — no schema change); existing law byte-identical; pytest 6/6; caveat renders on
+> every new page. **THIS IS STILL A FINDING AID, not an authoritative citation — completeness improved,
+> authority unchanged (prime rule 2 holds).** Remaining from the audit (NOT done): Wave C (2f relabels
+> CA/AU→official, UK→consolidated + honesty fixes), Wave D (authentic-text ingests: InfoSoc authentic
+> articles, Term 2011/77, 37 CFR GPO baseline), Wave E (LOW cleanups + footnote-bleed trims + reader-rail
+> surfacing so single-block schedules like 37 CFR App. A / CA Schedule I appear in the rail, not only
+> via search/deep-link). Real bug logged: UK CDPA `has_unapplied_effects` never set (SI 2026/103).
+
+> **Migration 002 (legal-authority axis) — APPLIED & backfilled (2026-08-14, last commit `68cb6e0`).
 > Per-instrument `authority` (binding|persuasive|precedent, set by PROCESS not publisher/`type`),
 > `positive_law`, `source_edition`, `court_level`. Backfilled on BOTH DBs: 32 non-case instruments
 > = `binding` (0 NULL), cases = `precedent`. Attorney-driven (Copyright Office makes both binding
@@ -313,7 +330,9 @@ Confirmed NON-bugs (left as-is, correct): DE repealed sections (labelled "(repea
    c. **Per-subsection text storage** — replace the reader's display-heuristic paragraph split
       (`_format_body`, reconstructs (a)/(1) paragraphs from a flat blob) with real
       per-subsection versions; gives clean, robust pinpoint text.
-   d. **Deep-linkable provision URLs — IN PROGRESS (2026-08-15).** `/instrument/{id}/{pinpoint}`
+   d. **Deep-linkable provision URLs — DONE (2026-08-15, commits `d222399` + `2e25a03`).** Sections,
+      alerts, and chapter-rail links all resolve on stable citation-derived slugs (survive rebuilds).
+      Original design note below. `/instrument/{id}/{pinpoint}`
       (today `?sec=<id>`, an internal DB row id that ROTS across a manifest rebuild); a hard
       requirement for the attorney audience (paste a link to a section into a memo). Design:
       resolve on a stable case-preserving PINPOINT SLUG derived from the `citation`
@@ -334,7 +353,11 @@ Confirmed NON-bugs (left as-is, correct): DE repealed sections (labelled "(repea
    `source_edition` label honest per source; prime rule 2 (finding aid, not authority) still
    holds — this narrows the gap, it does not make the tool a citation.
 
-**2g. Systematic appendix / schedule / annex sweep (NEW — 2026-08-15).** Appendices & annexes
+**2g. Systematic appendix / schedule / annex sweep — AUDIT DONE + Waves A+B LOADED (2026-08-16).**
+   See the top banner + `AUDIT-FINDINGS-2026-08-16.md`. The 8 HIGH+MED missing back-matter items are
+   ingested to both DBs. Remaining: Wave E LOW items (EU codification annexes 21/23/24, ES RDL wrapper,
+   CDPA Sch 8 note) + the reader-rail surfacing tweak. Original scope note:
+   **2g. Systematic appendix / schedule / annex sweep (NEW — 2026-08-15).** Appendices & annexes
    are currently captured only where the 2026-08-14 audit happened to touch them (Berne Appendix
    loaded; TRIPS Annex loaded as a `schedule` row; CDPA 349 schedule paras). There is no
    corpus-wide check that every instrument's back-matter (schedules, annexes, appendices,

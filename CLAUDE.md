@@ -139,6 +139,18 @@ Learned from the 2026-08-14 audit; these are prime-rule-1 (no fake law) corollar
 9. **Verify against the SOURCE artifact, not the DB.** The DB can look complete while the parser
    dropped, blanked, or misattributed content — always diff stored provisions against the fetched
    artifact. Scratch-clone with the sqlite backup API (a bare `cp` misses the WAL).
+10. **Back-matter is operative law — capture it, model it as a schedule (2f/2g audit, 2026-08-16).**
+   Appendices, annexes, schedules, addenda (KR 부칙), supplementary/transitional provisions (JP 附則,
+   US Pub. L. 94-553 §§102–115) are OPERATIVE and must be ingested, not dropped at the tail. The
+   parser-class bug is a `parse()` that stops at the last numbered section/article. Model them with
+   EXISTING kinds — `kind='schedule'` container + `kind='schedule_para'` sub-items, `role='schedule'`
+   (the TRIPS-annex precedent in `ingest_treaty.py`; the `kind` CHECK has no `annex`, so DON'T add one).
+   Repeal tombstones (CA Sch II/III `[Repealed…]`) keep the source notice verbatim + `status='repealed'`
+   (rule 2). Scope surgically: capture ONLY genuine back-matter, never the amending-act "RELATED
+   PROVISIONS"/"AMENDMENTS NOT IN FORCE" appendices (excluded) or ~625 editorial statutory notes.
+   Reader caveat: a `kind='schedule'` container that holds body but has NO `schedule_para` children does
+   NOT yet rail in the reader (reachable only via search / deep-link) — a known surfacing gap (Wave E).
+   **Adding back-matter improves COMPLETENESS, not AUTHORITY — the tool stays a finding aid (prime rule 2).**
 
 ## How to run
 - Python: `~/Julie/ai-law-portal/.venv/bin/python` (fastapi/uvicorn/jinja2). No `sqlite3` CLI.

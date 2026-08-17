@@ -16,7 +16,17 @@ Structure of the XML:
   * Each <Section> carries <Label> (the number, incl. decimals: 2.1, 14.1, 29.21) and a
     <MarginalNote> (its heading). Subsections/Definitions nest inside; their text is folded
     into the section's operative content (tags stripped) so the section versions + searches.
-  * Schedules contain no Sections and are not ingested as citable units here.
+  * The Act's own Schedules (I–III) sit BEFORE the excluded RelatedProvs/NifProvs appendices:
+    - SCHEDULE I "(Section 60) Existing Rights" — a two-column substituted-rights table plus
+      explanatory Provisions + a Footnote (referenced by in-force s. 60). It does NOT decompose
+      cleanly into ordered paragraphs, so it is captured VERBATIM on one kind='schedule'
+      container (role='schedule'), modelled on the TRIPS-Annex precedent in ingest_treaty.py.
+    - SCHEDULE II "[Repealed, 1993, c. 44, s. 74]" / SCHEDULE III "[Repealed, 1997, c. 24,
+      s. 51]" — captured as kind='schedule', status='repealed', body = the source's own
+      <Repealed> tombstone notice verbatim (never blanked, never fabricated).
+    The two amending-act appendices — <Schedule id="RelatedProvs"> ("RELATED PROVISIONS") and
+    <Schedule id="NifProvs"> ("AMENDMENTS NOT IN FORCE") — are NOT part of C-42 and stay
+    EXCLUDED (a prior audit removed 28 fake C-42 pinpoints from them).
 
 NO fake law: every provision's text is stripped from the fetched Section block.
 
@@ -45,6 +55,15 @@ _PART_RE = re.compile(
 _SECTION_RE = re.compile(r'<Section\b[^>]*>(?P<inner>(?:(?!</Section>).)*?)</Section>', re.S)
 _LABEL_RE = re.compile(r'<Label>(.*?)</Label>', re.S)
 _MARGINAL_RE = re.compile(r'<MarginalNote\b[^>]*>(.*?)</MarginalNote>', re.S)
+# A genuine Act Schedule: <Schedule …> with a numeric lims:id (I–III). The amending-act
+# appendices carry a text id instead (id="RelatedProvs" / id="NifProvs") — those are already
+# cut out of `xml` before this runs; anchoring on lims:id keeps them excluded belt-and-braces.
+_SCHEDULE_RE = re.compile(
+    r'<Schedule\b[^>]*\blims:id="\d+"[^>]*>(?P<inner>(?:(?!</Schedule>).)*?)</Schedule>', re.S)
+_SCHED_TITLE_RE = re.compile(r'<TitleText>(.*?)</TitleText>', re.S)
+# Roman-numeral → sort_int so Schedule I < II < III order deterministically.
+_ROMAN = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5}
+_SCHED_SORT_BASE = 10_000                                   # sort schedules after all sections
 
 
 def _clean(frag: str) -> str:
@@ -60,6 +79,34 @@ def _section_content(inner: str) -> str:
     body = re.sub(r'<Label>.*?</Label>', " ", body, count=1, flags=re.S)  # drop the section number
     body = re.sub(r'<HistoricalNote\b.*?</HistoricalNote>', " ", body, flags=re.S)  # drop provenance
     return _clean(body)
+
+
+def _add_schedules(rs: RecordSet, xml: str) -> None:
+    """Add the Act's own Schedules I–III (which sit before the excluded appendices).
+
+    Each is one kind='schedule' container, role='schedule'. Schedule I's body (a two-column
+    table + explanatory Provisions + footnote) does not decompose into clean ordered paragraphs,
+    so it is stored VERBATIM on the container (TRIPS-Annex precedent). A repealed Schedule shows
+    its own <Repealed> tombstone notice verbatim → is_repealed() flips status='repealed'."""
+    for idx, m in enumerate(_SCHEDULE_RE.finditer(xml)):
+        inner = m.group("inner")
+        lab = _LABEL_RE.search(inner)
+        if not lab:
+            continue
+        label = _clean(lab.group(1))                        # "SCHEDULE I"
+        num = re.sub(r'(?i)^\s*SCHEDULE\s+', "", label)     # "SCHEDULE I" → "I"
+        si = _SCHED_SORT_BASE + _ROMAN.get(num.upper(), idx)
+        tt = _SCHED_TITLE_RE.search(inner)
+        heading = _clean(tt.group(1)) if tt else None       # "Existing Rights"
+        # Body: the whole Schedule block minus its leading Label (the schedule number). The
+        # ScheduleFormHeading/OriginatingRef/TitleText/table/Provisions/Footnote and the
+        # <Repealed> tombstone all fold into verbatim body text (tags stripped).
+        body = re.sub(r'<Label>.*?</Label>', " ", inner, count=1, flags=re.S)
+        body = re.sub(r'<HistoricalNote\b.*?</HistoricalNote>', " ", body, flags=re.S)
+        body = _clean(body)
+        rs.add(kind="schedule", label=f"Schedule {num}", heading=heading,
+               sort_int=si, sort_suffix="", role="schedule",
+               citation=f"Copyright Act (Canada) Schedule {num}", content=body or None)
 
 
 def parse(html_path: str) -> RecordSet:
@@ -111,6 +158,10 @@ def parse(html_path: str) -> RecordSet:
                    heading=_clean(note.group(1)) if note else None,
                    sort_int=si, sort_suffix=su,
                    citation=f"Copyright Act (Canada) s. {num}", content=body or None)
+
+    # The Act's own Schedules (I–III) live in the region BEFORE the RelatedProvs cut above, so
+    # they are still present in `xml`. Add them after the sections.
+    _add_schedules(rs, xml)
     return rs
 
 
@@ -127,7 +178,8 @@ def main() -> None:
                    version_label="laws-lois.justice.gc.ca (consolidated EN)",
                    fts_title="Copyright Act (Canada)")
     print(f"instrument #{s['instrument_id']}  Canada Copyright Act — {s['provisions']} provisions "
-          f"({s['by_kind'].get('section', 0)} sections, {s['by_kind'].get('part', 0)} parts); "
+          f"({s['by_kind'].get('section', 0)} sections, {s['by_kind'].get('part', 0)} parts, "
+          f"{s['by_kind'].get('schedule', 0)} schedules); "
           f"versions new {s['versions_new']}, unchanged {s['versions_unchanged']} "
           f"(is_official_language=1)")
 
