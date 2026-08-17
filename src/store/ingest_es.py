@@ -91,6 +91,21 @@ _ORDINAL_WORD = {
     "nineteenth": 19, "twentieth": 20, "sole": 1,
 }
 
+# ── RDL 1/1996 enacting-decree wrapper (Wave E, 2f/2g audit #10) ────────────────
+# The artifact opens with the Royal Legislative Decree 1/1996 WRAPPER that enacts the
+# consolidated text: "Single Article. Purpose of the Decree." / "Single Repeal Provision.
+# Acts repealed." (the operative derogatoria — it repeals Act 22/1987 etc.) / "Single Final
+# Provision. Entry into force.". These are DISTINCT from the TRLPI's own back-matter tail
+# ("Sole Repealing Provision." / "Sole Final Provision.", already captured as TRLPI
+# Repeal/Final Provision). Captured verbatim as a kind='schedule' container +
+# schedule_para children (rule 10 — existing kinds only), sorted after everything else.
+# The RDL's PREAMBLE (before "I do hereby decree:") is deliberately NOT captured — it is
+# non-operative narrative, not an addressable provision.
+_WRAPPER = re.compile(r"^Single\s+(Article|Repeal Provision|Final Provision)\.\s*(.*)$")
+# The wrapper region ends at the centre-indented consolidated-text banner before BOOK I.
+_WRAPPER_END = re.compile(r"^\s+CONSOLIDATED TEXT OF THE INTELLECTUAL PROPERTY ACT")
+_WRAPPER_SORT_BASE = 20000
+
 # Back-matter families → (container part label, container citation, per-provision citation stem,
 # per-provision label stem). The Repealing/Final families are single "Sole" provisions.
 _BM_FAMILY = {
@@ -147,6 +162,32 @@ def _strip_fn(text: str | None) -> str | None:
 def _lines(path: str) -> list[str]:
     text = open(path, encoding="utf-8", errors="replace").read().replace("\f", "")
     return [ln.rstrip() for ln in text.split("\n")]
+
+
+def _parse_wrapper(lines: list[str], rs: RecordSet) -> None:
+    """Capture the RDL 1/1996 enacting-decree wrapper (Single Article / Single Repeal
+    Provision / Single Final Provision) from the pre-BOOK-I head of the artifact, verbatim.
+    Each heading line reads 'Single <Family>. <Title>.'; its body runs to the next wrapper
+    heading or the consolidated-text banner. Scoped to the region BEFORE the banner so the
+    TRLPI's own 'Sole …' back-matter (a different text, captured by the main loop) can
+    never be re-read here."""
+    end = next((i for i, ln in enumerate(lines) if _WRAPPER_END.match(ln)), len(lines))
+    heads = [(i, m) for i, ln in enumerate(lines[:end])
+             if (m := _WRAPPER.match(ln.strip()))]
+    if not heads:
+        return
+    cid = rs.add(kind="schedule", label="RDL 1/1996",
+                 heading="Royal Legislative Decree 1/1996 (enacting decree)",
+                 sort_int=_WRAPPER_SORT_BASE, sort_suffix="", role="schedule",
+                 citation="TRLPI RDL 1/1996", content=None)
+    for k, (i, m) in enumerate(heads):
+        stop = heads[k + 1][0] if k + 1 < len(heads) else end
+        body = [ln.strip() for ln in lines[i + 1:stop] if ln.strip()]
+        label = f"Single {m.group(1)}"
+        rs.add(parent_local=cid, kind="schedule_para", label=label,
+               heading=_strip_fn(m.group(2)), sort_int=_WRAPPER_SORT_BASE + 1 + k,
+               sort_suffix="", role="schedule", citation=f"TRLPI RDL 1/1996 {label}",
+               content="\n".join(body).strip() or None)
 
 
 def parse(path: str) -> RecordSet:
@@ -318,6 +359,9 @@ def parse(path: str) -> RecordSet:
                    heading=heading, sort_int=doc_i, sort_suffix="",
                    citation=citation, content=content)
             continue
+    # RDL 1/1996 enacting-decree wrapper (head of the artifact, before BOOK I) — appended
+    # last so its schedule records sort after the consolidated text's own back-matter.
+    _parse_wrapper(lines, rs)
     return rs
 
 

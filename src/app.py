@@ -301,6 +301,9 @@ def _section_reader(conn, iid, sec):
 
 _LEAF_KINDS = ("section", "article", "schedule_para", "recital")
 _CONTAINER_KINDS = ("part", "subpart", "chapter", "subchapter")
+# Sentinel chapter-rail id/slug for the synthetic "Schedules" group in _chapter_index (View 1):
+# top-level schedules aren't _CONTAINER_KINDS, so their leaves need their own rail entry.
+_SCHED_SEL = "schedules"
 
 # Reconstruct KM-style body paragraphs from the flattened section text: a subsection marker
 # '(a)'/'(1)'/'(A)' opens a paragraph. Skip markers that are cross-references (a marker
@@ -382,6 +385,7 @@ def _chapter_index(conn, iid, chap):
     cid2slug, slug2cid = _chapter_slug_map(conn, iid)         # stable chapter-rail slugs
     if isinstance(chap, str):                                 # resolve a slug → container id …
         chap = slug2cid.get(chap) or slug2cid.get(chap.lower()) or \
+            (_SCHED_SEL if chap.lower() == _SCHED_SEL else None) or \
             (int(chap) if chap.isdigit() else None)           # … tolerating a legacy int id ('5')
     rows = [dict(r) for r in conn.execute(
         "SELECT id, parent_id, kind, label, heading, sort_int, sort_suffix, citation "
@@ -423,9 +427,24 @@ def _chapter_index(conn, iid, chap):
         _fill_incipits(conn, grid)
         return {"flat": True, "chapters": [], "selected": None, "sel_chap": None,
                 "grid": grid, "numw": numw(grid)}
+    # Wave-E View-1 fix: a schedule LEAF whose top-level ancestor is NOT a rendered container
+    # (CA Schedule I–III, CDPA schedule paragraphs under top-level 'schedule' rows, JP/KR
+    # addenda blocks, EU annexes) used to group under an id the chapter rail never lists —
+    # invisible on the landing page though railed/searchable. Collect them into ONE trailing
+    # "Schedules" pseudo-chapter (?chap=schedules) instead of dropping them.
+    top_ids = {t["id"] for t in tops}
     groups: dict = {}
+    sched_grid: list = []
     for lf in leaves:
-        groups.setdefault(top(lf)["id"], []).append(lf)
+        t = top(lf)
+        if t["id"] in top_ids:
+            groups.setdefault(t["id"], []).append(lf)
+        elif lf["kind"] in ("schedule", "schedule_para"):
+            # keep each schedule's paras contiguous; the container id breaks sort-key TIES
+            # (CDPA Sch ZA1 vs Sch 1 share a doc-order sort_int — without it their paras
+            # would interleave pairwise)
+            lf["_topkey"] = (*key(t), t["id"])
+            sched_grid.append(lf)
     chapters = []
     for tc in sorted(tops, key=key):
         secs = sorted(groups.get(tc["id"], []), key=key)
@@ -433,10 +452,18 @@ def _chapter_index(conn, iid, chap):
                          "label": tc["label"], "heading": tc["heading"],
                          "n": len(secs),
                          "range": f"{secs[0]['label']}–{secs[-1]['label']}" if secs else ""})
+    if sched_grid:
+        sg = sorted(sched_grid, key=lambda r: (r["_topkey"], key(r)))
+        groups[_SCHED_SEL] = sg
+        chapters.append({"id": _SCHED_SEL, "slug": _SCHED_SEL, "label": "Schedules",
+                         "heading": None, "n": len(sg),
+                         "range": f"{sg[0]['label']}–{sg[-1]['label']}"})
     sel = chap if (chap in groups) else (chapters[0]["id"] if chapters else None)
-    grid = sorted(groups.get(sel, []), key=key)
+    grid = groups.get(sel, []) if sel == _SCHED_SEL else sorted(groups.get(sel, []), key=key)
     _fill_incipits(conn, grid)
-    return {"flat": False, "chapters": chapters, "selected": sel, "sel_chap": by_id.get(sel),
+    sel_chap = by_id.get(sel) or ({"label": "Schedules", "heading": None}
+                                  if sel == _SCHED_SEL else None)
+    return {"flat": False, "chapters": chapters, "selected": sel, "sel_chap": sel_chap,
             "grid": grid, "numw": numw(grid)}
 
 

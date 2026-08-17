@@ -44,6 +44,8 @@ def sha256(text: str) -> str:
 
 
 def _clean(frag: str) -> str:
+    # script/style blocks go FIRST (rule 5) so page-footer JS can never survive as body text.
+    frag = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", frag, flags=re.S | re.I)
     frag = re.sub(r"<a\s+name[^>]*>\s*</a>", "", frag)
     frag = re.sub(r"<[^>]+>", " ", frag)
     return re.sub(r"\s+", " ", htmlmod.unescape(frag)).strip()
@@ -86,7 +88,16 @@ def parse(html_path: str) -> list[dict]:
             label = f"Article {token}"
             cite = f"Berne Convention Art. {token}"
         si, su = ordinal(token, i)
-        body = _clean(html[m.end(): heads[i + 1].start() if i + 1 < len(heads) else m.end() + 8000])
+        if i + 1 < len(heads):
+            end = heads[i + 1].start()
+        else:
+            # LAST article (Appendix Art. VI): segmentation stops at the editorial-footnote
+            # rule (rules 3/4) — the WIPO page follows the treaty text with an <hr> and then
+            # numbered WIPO footnotes (incl. quoted 1896-treaty text, a fake-law confusion
+            # risk) plus the page-footer scripts. None of that is Paris-Act text.
+            fm = re.search(r"<hr\b", html[m.end():])
+            end = m.end() + (fm.start() if fm else 8000)
+        body = _clean(html[m.end():end])
         aid = add(parent_local=None, kind="article", label=label, heading=note,
                   sort_int=si, sort_suffix=su, role="enacting", citation=cite, content=body or None)
         # numbered paragraphs (1)(2)... as addressable child provisions (article carries the text).
@@ -143,25 +154,37 @@ def _upsert_provision(conn, iid, parent_id, r) -> int:
 
 
 def _store_version(conn, iid, provid, r, source_url, point_in_time) -> str:
+    """Idempotent BY CONTENT, mirroring `_common._store_version`: unchanged text is a no-op;
+    changed text UPDATES the same (provision, point-in-time, language) slot IN PLACE (a
+    re-segmentation of the same manifestation is a correction, not a new observed version)
+    or inserts when the slot is empty."""
     content = r["content"]
     digest = sha256(content)
     existing = conn.execute(
-        "SELECT content_sha256 FROM versions WHERE instrument_id=? AND provision_id=? "
+        "SELECT id, content_sha256 FROM versions WHERE instrument_id=? AND provision_id=? "
         "AND point_in_time IS ? AND language='en'", (iid, provid, point_in_time)).fetchone()
     outcome = "unchanged"
-    if not existing or existing[0] != digest:
+    if not existing or existing[1] != digest:
         conn.execute("UPDATE versions SET is_current=0 WHERE instrument_id=? AND provision_id=?",
                      (iid, provid))
         # Treaty text from WIPO is an official English text (authentic); not a consolidation.
-        cur = conn.execute(
-            "INSERT INTO versions (instrument_id, provision_id, version_label, point_in_time, "
-            "language, is_official_language, is_consolidated, is_authentic, content, "
-            "content_sha256, source_url, retrieved_at, is_current) "
-            "VALUES (?,?,?,?, 'en', 1, 0, 1, ?,?,?,?, 1)",
-            (iid, provid, "WIPO Lex (Paris Act 1971)", point_in_time, content, digest,
-             source_url, now_iso()))
+        if existing:                                   # same slot → correct in place, resync FTS
+            conn.execute("UPDATE versions SET content=?, content_sha256=?, source_url=?, "
+                         "retrieved_at=?, is_current=1 WHERE id=?",
+                         (content, digest, source_url, now_iso(), existing[0]))
+            vid = existing[0]
+            conn.execute("DELETE FROM versions_fts WHERE rowid=?", (vid,))
+        else:
+            cur = conn.execute(
+                "INSERT INTO versions (instrument_id, provision_id, version_label, point_in_time, "
+                "language, is_official_language, is_consolidated, is_authentic, content, "
+                "content_sha256, source_url, retrieved_at, is_current) "
+                "VALUES (?,?,?,?, 'en', 1, 0, 1, ?,?,?,?, 1)",
+                (iid, provid, "WIPO Lex (Paris Act 1971)", point_in_time, content, digest,
+                 source_url, now_iso()))
+            vid = cur.lastrowid
         conn.execute("INSERT INTO versions_fts (rowid, title, citation, body) VALUES (?,?,?,?)",
-                     (cur.lastrowid, "Berne Convention", r["citation"], content))
+                     (vid, "Berne Convention", r["citation"], content))
         outcome = "new"
     conn.execute("DELETE FROM provisions_fts WHERE rowid=?", (provid,))
     conn.execute("INSERT INTO provisions_fts (rowid, citation, heading, body) VALUES (?,?,?,?)",
