@@ -246,7 +246,7 @@ def _section_reader(conn, iid, sec):
     # (10000+) places it after the body and interleaved chronologically with sibling
     # schedule-with-children groups (JP). Non-schedule rows keep the existing c.sort_int order.
     rows = [dict(r) for r in conn.execute(
-        "SELECT s.id, s.label, s.heading, s.citation, s.kind, "
+        "SELECT s.id, s.label, s.heading, s.citation, s.kind, s.status, "
         "  c.label AS chap_label, c.sort_int AS c_si, c.sort_suffix AS c_su "
         "FROM provisions s LEFT JOIN provisions c ON c.id=s.parent_id "
         "WHERE s.instrument_id=? AND " + LEAF_WHERE.format(a='s') +
@@ -380,8 +380,23 @@ def _incipit(content, limit=90):
 
 
 def _fill_incipits(conn, rows):
-    """Attach `incipit` to any leaf dict lacking a heading, from its current version text."""
+    """Attach `incipit` to any leaf dict lacking a heading, from its current version text.
+
+    Exception — repealed tombstones: legislation.gov.uk renders a fully-repealed provision's
+    body as `number + dotted leader` ("5 . . . . . . ."), so ~32 heading-less repealed CDPA
+    provisions would preview as a wall of dots. When the row carries `status='repealed'` AND
+    has no source heading, show a muted "[Repealed]" UI label instead of the incipit. Keyed
+    STRICTLY on the human/ingest-set `status` column — never on what the text looks like —
+    so heading-less LIVE provisions (BR/FR articles) keep their real incipit, and a live
+    provision can never be labelled repealed. "[Repealed]" is a UI label, not asserted law:
+    the reading pane still shows the source's verbatim dotted leader + the rust badge."""
     need = [r for r in rows if not (r.get("heading") or "").strip()]
+    if not need:
+        return
+    for r in need:
+        if r.get("status") == "repealed":
+            r["incipit"] = "[Repealed]"
+    need = [r for r in need if "incipit" not in r]
     if not need:
         return
     ids = [r["id"] for r in need]
@@ -404,7 +419,7 @@ def _chapter_index(conn, iid, chap):
             (_SCHED_SEL if chap.lower() == _SCHED_SEL else None) or \
             (int(chap) if chap.isdigit() else None)           # … tolerating a legacy int id ('5')
     rows = [dict(r) for r in conn.execute(
-        "SELECT id, parent_id, kind, label, heading, sort_int, sort_suffix, citation "
+        "SELECT id, parent_id, kind, label, heading, sort_int, sort_suffix, citation, status "
         "FROM provisions WHERE instrument_id=?", (iid,))]
     if not rows:
         return None
