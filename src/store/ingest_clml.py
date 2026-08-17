@@ -23,6 +23,23 @@ SKIP = {"BlockAmendment", "Quotation"}          # reproduce OTHER instruments' w
 PLEVEL = {"P2": "subsection", "P3": "paragraph", "P4": "subparagraph", "P5": "clause", "P6": "subclause"}
 NUM_RE = re.compile(r"^\s*(\d+)([A-Za-z]*)\s*$")
 
+# A WHOLE-provision repeal tombstone body: the provision number followed by nothing but a
+# dotted leader (". . . . . ." — how legislation.gov.uk prints a fully repealed/omitted
+# provision, e.g. s.5). fullmatch-only: an EMBEDDED dotted run inside live text (s.29
+# "fair dealing with a . . . work") does NOT match — those provisions stay in force.
+DOTTED_TOMBSTONE = re.compile(r"\s*\d+[A-Za-z]*\.?\s*(\.\s*){4,}\.?\s*")
+
+
+def is_tombstone(el, content: str | None) -> bool:
+    """Detect a fully repealed/omitted provision from the source's own two signals:
+    (a) `Status="Repealed"` stamped on the CLML element (e.g. Sch. ZA1 para. 1), or
+    (b) the ENTIRE current body is `number + dotted leader` (e.g. s.5 — some dotted
+        tombstones carry no Status attribute).  Never text-content heuristics beyond
+        the pure-dots fullmatch, so partially-omitted live provisions are untouched."""
+    if el.get("Status") == "Repealed":
+        return True
+    return bool(content and DOTTED_TOMBSTONE.fullmatch(content))
+
 INSTRUMENT = dict(jurisdiction="GB", type="statute", official_citation="CDPA 1988",
                   ext_id_scheme="ELI", ext_id="ukpga/1988/48",
                   title="Copyright, Designs and Patents Act 1988")
@@ -251,7 +268,8 @@ def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
                         cite = f"{base} para. {pn}"
                         add(parent_local=parent_local, kind="schedule_para",
                             label=f"para. {pn}", heading=None, sort_int=pn, sort_suffix="",
-                            role="schedule", citation=cite, content=text, status="in_force")
+                            role="schedule", citation=cite, content=text,
+                            status="repealed" if is_tombstone(c, text) else "in_force")
                     continue
                 walk(c, parent_local, container_cite, sec_cite, subpath,
                      _txt(_child(c, "Title")), in_sched, sched_no)
@@ -267,10 +285,17 @@ def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
                 # _operative_text prefixes the section number; strip it to see if the BODY is an
                 # empty <Text/> or a dots-only row → a repealed stub. Show the grounded repeal notice.
                 body_only = re.sub(r"^\s*\d+[A-Za-z]*\.?\s*", "", content).strip()
-                if not body_only or set(body_only) <= set(". "):
+                tombstone = is_tombstone(c, content)
+                if tombstone or not body_only or set(body_only) <= set(". "):
                     notice = repeal_notice(c)
                     if notice:
                         content, status = notice, "repealed"
+                    elif tombstone:
+                        # Source marks the provision fully repealed (Status attr and/or a pure
+                        # dotted-leader body) but keys no <Commentary> notice to it — set the
+                        # status and keep the source's dotted leader VERBATIM (prime rule 1:
+                        # never blank it, never fabricate the pre-repeal text).
+                        status = "repealed"
                 if in_sched:
                     # container_cite is the Schedule (or Schedule+Part) — keeps paragraph
                     # numbers unique when a schedule restarts numbering across its Parts.
@@ -290,9 +315,12 @@ def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
                 si, su = ordinal(num, sib)
                 newsub = subpath + [num]
                 cite = (sec_cite or "CDPA 1988 s.") + "".join(f"({x})" for x in newsub)
+                # Sub-level provisions can be individually repealed too — honor the source's
+                # Status attribute (they store no content, so the dotted-body signal is N/A here).
                 lid = add(parent_local=parent_local, kind=PLEVEL[name], label=f"({num})",
                           heading=None, sort_int=si, sort_suffix=su,
-                          role="schedule" if in_sched else "enacting", citation=cite, content=None)
+                          role="schedule" if in_sched else "enacting", citation=cite, content=None,
+                          status="repealed" if is_tombstone(c, None) else "in_force")
                 walk(c, lid, container_cite, sec_cite, newsub, None, in_sched, sched_no)
             else:
                 walk(c, parent_local, container_cite, sec_cite, subpath, group_title, in_sched, sched_no)
