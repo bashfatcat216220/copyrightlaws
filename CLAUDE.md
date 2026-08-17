@@ -112,6 +112,8 @@ Learned from the 2026-08-14 audit; these are prime-rule-1 (no fake law) corollar
    usually not in the source). `_common.is_repealed()` auto-detects the tombstone → sets `status`;
    `ingest_clml` mines the `<Commentary>` for CDPA's empty `<Text/>` stubs. Reader shows a rust
    "Repealed" badge. Where no heading/text exists at all, show the "read at source" placeholder.
+   Textual-notice detection alone is NOT enough for CLML — the structural dotted-leader / `Status`
+   signals are handled by `ingest_clml.is_tombstone`/`_heading` (see rule 11).
 3. **Segmentation stops at structural boundaries.** An article/section body must NOT run to
    "next Article" or end-of-file — cut at the annex/appendix/footnote/endnote block, the trailing
    table-of-contents, the amending-act "RELATED PROVISIONS" appendix, or the schedule. The
@@ -151,6 +153,19 @@ Learned from the 2026-08-14 audit; these are prime-rule-1 (no fake law) corollar
    Reader caveat: a `kind='schedule'` container that holds body but has NO `schedule_para` children does
    NOT yet rail in the reader (reachable only via search / deep-link) — a known surfacing gap (Wave E).
    **Adding back-matter improves COMPLETENESS, not AUTHORITY — the tool stays a finding aid (prime rule 2).**
+11. **Repeal signals are STRUCTURAL, not just textual (legislation.gov.uk dotted-leader convention, 2026-08-17).**
+   CLML marks a fully-repealed provision three ways the textual-notice detector (rule 2) missed: (a) the whole
+   body is a pure dotted leader (`5 . . . .`) with no words; (b) a `Status="Repealed"` attribute on the element
+   (sometimes with no keyed `<Commentary>`); (c) the dotted "no heading" marker lands in `<Title>` while the real
+   repeal notice sits in the BODY (s.265 → "S. 265 repealed (9.12.2001) by S.I. 2001/3949…"). `ingest_clml.is_tombstone`
+   reads (a)+(b) → `status='repealed'`, keeping the dotted text VERBATIM (prime rule 1 — never blank, never
+   fabricate pre-repeal text); `ingest_clml._heading` NULLs a dots-only `<Title>` so the reader rails the body's
+   notice, not a wall of dots. Reader `_fill_incipits` shows a muted `[Repealed]` label ONLY when `status='repealed'`
+   AND the body is a pure dotted leader — a notice body keeps its informative incipit. Do NOT flag a PARTIAL
+   omission (real text with an embedded `. . .`, e.g. s.29/s.72, or a trailing omitted-words marker in a real
+   heading like s.14 "…broadcasts . . . .") — the body test is a `fullmatch`, never a substring. `status`/`heading`
+   corrections are metadata-only (no content/sha writes) → monitor-safe; apply surgically (rule 7) via a migration
+   (`004_cdpa_repealed_tombstones.py`, `005_cdpa_dotted_headings.py`) AND make them durable in the ingest.
 
 ## How to run
 - Python: `~/Julie/ai-law-portal/.venv/bin/python` (fastapi/uvicorn/jinja2). No `sqlite3` CLI.
