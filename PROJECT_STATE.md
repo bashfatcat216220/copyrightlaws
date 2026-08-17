@@ -2,7 +2,23 @@
 
 > Status comes from THIS file, read fresh. Do not answer "where are we" from memory.
 
-_Last updated: 2026-08-16._
+_Last updated: 2026-08-17._
+
+> **CDPA repealed-tombstone + dotted-heading fix — LOADED to BOTH DBs, 2026-08-17 (2 fable agents + orchestrator).**
+> Follow-up to a user report of a "wall of dots" in the CDPA reader sidebar. Two root causes, both from
+> legislation.gov.uk's dotted-leader repeal convention (verified against `spike/artifacts/cdpa.xml`, rule 9):
+> (1) **32 fully-repealed provisions** whose entire body is a dotted leader (`5 . . . .`) were mislabeled
+> `status='in_force'` — `ingest_clml` never read `Status="Repealed"` nor the pure-dotted `<Text>`; (2) **6
+> repealed sections** (s.265/268/282/283/284/300) stored the dotted "no heading" marker in `heading` while the
+> real repeal notice sat in the body, so the rail railed the dots. Fixes: `status='repealed'` on the 32
+> (migration `004_cdpa_repealed_tombstones.py` + durable `ingest_clml.is_tombstone`); `heading`→NULL on the 6
+> (migration `005_cdpa_dotted_headings.py` + durable `ingest_clml._heading`); rail now shows a muted `[Repealed]`
+> ONLY for dotted-leader tombstones while PRESERVING informative repeal-notice previews (`_fill_incipits` gated
+> on `status='repealed'` AND a dotted body). All metadata-only — **0 version/content/sha writes, alerts still 91,
+> monitor untouched (rule 7)**; CDPA repealed **29→61**; pytest 6/6; app on :8021 shows **0 dot-runs**, 30
+> `[Repealed]` labels, the 6 sections now rail their repeal notice, BR/FR live incipits intact. Local `main`
+> only — NOT pushed. (Canaries s.29/s.72 with embedded dots correctly stayed `in_force`; 4 headings with a
+> trailing omitted-words marker, e.g. s.14/68/72, are legitimate verbatim source and kept.)
 
 > **Back-matter additions (2f/2g audit → Waves A+B) — LOADED to BOTH DBs, 2026-08-16.**
 > A fresh read-only audit (7 fable agents by jurisdiction group) → `AUDIT-FINDINGS-2026-08-16.md`
