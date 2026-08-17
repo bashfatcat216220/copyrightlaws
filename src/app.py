@@ -119,6 +119,21 @@ SOURCE_VINTAGE = {
                   "confirm against the official source.",
     "es-trlpi-1996": "Source translation dated ~2012 — may not reflect later amendments; "
                      "confirm against the official source.",
+    # Wave C (2f audit, 2026-08-16) — NL and IT are the same class of stale hand-loaded
+    # translation as FR/ES and were missing their caveat:
+    "nl-auteurswet": "Source translation dated ~2012 — may not reflect later amendments; "
+                     "confirm against the official source.",
+    "it-lda-633-1941": "Source translation dated ~2003 — may not reflect later amendments; "
+                       "confirm against the official source.",
+}
+
+# Per-instrument caveat notes (Wave C, 2026-08-16) — same mechanism and render slot as
+# SOURCE_VINTAGE (keyed by ext_id; the instruments table has no note column). Honesty
+# metadata only; the stored text is never altered.
+INSTRUMENT_NOTES = {
+    "in-copyright-1957": "Authoritative text is the Gazette of India; India Code is an "
+                         "as-is departmental consolidation, and indiacode.nic.in blocks "
+                         "scripted refresh — confirm against the official source.",
 }
 
 
@@ -263,7 +278,8 @@ def _section_reader(conn, iid, sec):
         cur["sections"].append(r)
     sel = conn.execute(
         "SELECT p.id, p.label, p.heading, p.citation, p.status, v.content, v.source_url, "
-        "  v.retrieved_at, v.point_in_time, v.is_official_language, v.is_authentic "
+        "  v.retrieved_at, v.point_in_time, v.is_official_language, v.is_authentic, "
+        "  v.has_unapplied_effects "
         "FROM provisions p LEFT JOIN versions v ON v.provision_id=p.id AND v.is_current=1 "
         "WHERE p.id=?", (sel_id,)).fetchone()
     sel = dict(sel) if sel else None
@@ -476,9 +492,13 @@ def _render_instrument(request: Request, iid: int, tab: str,
     cases: list = []
     tab = "history" if tab == "history" else "cases"
 
+    # vintage_note is the shared per-instrument caveat slot: source-vintage staleness and/or
+    # the instrument's own caveat note (e.g. IN: Gazette controls) render as one warn flag.
+    note = " ".join(filter(None, (SOURCE_VINTAGE.get(inst["ext_id"]),
+                                  INSTRUMENT_NOTES.get(inst["ext_id"])))) if inst else None
     ctx = dict(inst=dict(inst) if inst else None, amendments=amendments, cases=cases, tab=tab,
                view="none",
-               vintage_note=SOURCE_VINTAGE.get(inst["ext_id"]) if inst else None)
+               vintage_note=note or None)
     if inst and has_prov and sec is not None:              # View 2 — section reader
         rail, sel = _section_reader(conn, iid, sec)
         rail_numw = max((len(s["label"]) for grp in (rail or []) for s in grp["sections"]),

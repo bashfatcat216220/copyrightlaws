@@ -36,9 +36,11 @@ import re
 
 from _common import RecordSet, ordinal, run_ingest
 
+# Title says 200–235: Chapter II as ingested spans Parts 200–235 (incl. the reserved Part 200
+# and the Copyright Claims Board parts) — the old "Parts 201–212" undersold what we hold (F-CFR2).
 INSTRUMENT = dict(jurisdiction="US", type="regulation", official_citation="37 C.F.R.",
                   ext_id_scheme="CFR", ext_id="us-37cfr-copyright",
-                  title="37 C.F.R. — Copyright Office (Parts 201–212)")
+                  title="37 C.F.R. — Copyright Office (Parts 200–235)")
 
 # Chapter II = the U.S. Copyright Office, Library of Congress.
 COPYRIGHT_CHAPTER = "II"
@@ -55,6 +57,18 @@ def _text(el) -> str:
 def _head(el):
     h = el.find("./{*}HEAD")
     return _text(h) if h is not None else None
+
+
+# A section/part whose HEAD carries the official bracket-note '[Reserved]' and no body is a
+# placeholder the CFR editors hold open — it is not in-force text. status='reserved' (allowed
+# by the provisions CHECK since migration 003) so the metadatum stops overstating (F-CFR audit
+# 2026-08-16). The bracket-note is the SIGNAL — a section that merely mentions "[Reserved]" in
+# a real body keeps status='in_force'. Returns None otherwise (RecordSet.add applies defaults).
+_RESERVED = re.compile(r"\[\s*Reserved\s*\]", re.I)
+
+
+def _reserved_status(heading: str | None, body: str | None) -> str | None:
+    return "reserved" if (heading and _RESERVED.search(heading) and not (body or "").strip()) else None
 
 
 def _split_head(raw: str) -> tuple[str, str | None]:
@@ -184,7 +198,8 @@ def parse(xml_path: str) -> RecordSet:
                 si, su = ordinal(num, i)
                 lid = rs.add(kind="part", label=f"Part {num}", heading=heading,
                              sort_int=si, sort_suffix=su, parent_local=ch_local,
-                             citation=f"37 C.F.R. Part {num}")
+                             citation=f"37 C.F.R. Part {num}",
+                             status=_reserved_status(heading, None))
                 walk(c, lid, None)
             elif name == "DIV6":                                 # SUBPART (letter N, citable)
                 letter = c.get("N")
@@ -210,7 +225,8 @@ def parse(xml_path: str) -> RecordSet:
                 rs.add(kind="section", label=f"{sig} {num}", heading=heading,
                        sort_int=si, sort_suffix=su,
                        parent_local=subpart_local or part_local,
-                       citation=f"37 C.F.R. § {num}", content=body)
+                       citation=f"37 C.F.R. § {num}", content=body,
+                       status=_reserved_status(heading, body))
             elif c.get("TYPE") == "APPENDIX":                    # APPENDIX (DIV9) — schedule model
                 # N = "Appendix A to Part 202"; derive the App letter + part for the citation.
                 n = c.get("N") or ""

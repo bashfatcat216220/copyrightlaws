@@ -123,6 +123,7 @@
         <div class="status">
           <div class="lbl">Status</div>
           {% if sel.status == 'repealed' %}<div class="val" style="color:var(--rust);">Repealed</div>
+          {% elif sel.status == 'reserved' %}<div class="val">Reserved</div>
           {% else %}<div class="val">In force</div>{% endif %}
           {% if sel.point_in_time %}<div class="eff">EFFECTIVE {{ sel.point_in_time }}</div>{% endif %}
         </div>
@@ -132,6 +133,7 @@
         {% if sel.nver %}<span>VERSION{{ '' if sel.nver == 1 else 'S' }} · {{ sel.nver }}</span>{% endif %}
         {% if not sel.is_authentic %}<span class="flag warn" style="margin:0;">Consolidated — not authentic</span>{% endif %}
         {% if not sel.is_official_language %}<span class="flag warn" style="margin:0;">Unofficial translation</span>{% endif %}
+        {% if sel.has_unapplied_effects %}<span class="flag warn" style="margin:0;">Not fully up to date — the source records amendments not yet applied to this text</span>{% endif %}
       </div>
       {% if vintage_note %}<div class="flag warn" style="margin:6px 0 0;">{{ vintage_note }}</div>{% endif %}
 

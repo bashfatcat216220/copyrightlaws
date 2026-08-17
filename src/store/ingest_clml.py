@@ -72,7 +72,92 @@ def _operative_text(el) -> str:
     return " ".join(parts)
 
 
-def parse(xml_path: str) -> tuple[str, list[dict]]:
+# ── ukm effects metadata (prime rule 3: flag the caveats, never silently) ────
+# The CLML <ukm:Metadata> block carries <ukm:UnappliedEffects>: amendments the editors have
+# not yet applied to the consolidated text. An effect with RequiresApplied="true" means the
+# TEXT WE STORE IS KNOWN NOT TO REFLECT IT — exactly what versions.has_unapplied_effects
+# exists to surface. (RequiresApplied="false" effects need no text change — e.g. expired
+# SIs, commencement-only entries — and are NOT flagged.) Found 2026-08-16: the snapshot
+# carried a live RequiresApplied="true" effect (SI 2026/103 art. 4(1), affecting Pt. 2)
+# but every version read has_unapplied_effects=0 because this metadata was never parsed.
+
+def _parse_unapplied_effects(root) -> list[dict]:
+    """Collect RequiresApplied="true" effects → [{'paths': [...], 'desc': '...'}].
+    `paths` are the affected-provision URI tails under this act (e.g. 'part/II',
+    'schedule/3/paragraph/17') from <ukm:AffectedProvisions>/<ukm:Section URI=…> —
+    the source's own machine-readable scope, never inferred from prose."""
+    act_uri = f"/{INSTRUMENT['ext_id']}/"                 # '/ukpga/1988/48/'
+    effects: list[dict] = []
+    for el in root.iter():
+        if local(el.tag) != "UnappliedEffect" or el.get("RequiresApplied") != "true":
+            continue
+        paths: list[str] = []
+        for ap in el:
+            if local(ap.tag) != "AffectedProvisions":     # NOT AffectingProvisions (other acts)
+                continue
+            for s in ap.iter():
+                uri = s.get("URI") if local(s.tag) == "Section" else None
+                if uri and act_uri in uri:
+                    paths.append(uri.split(act_uri, 1)[1].strip("/"))
+        # One pinpoint is often split across Sections ('Sch. 3 ' + 'para. 17' → 'schedule/3'
+        # AND 'schedule/3/paragraph/17') — keep only the MOST SPECIFIC path so a paragraph
+        # effect never flags its whole schedule.
+        paths = [p for p in paths if not any(q != p and q.startswith(p + "/") for q in paths)]
+        if paths:
+            effects.append({"paths": paths,
+                            "desc": f"{el.get('Type')} by {el.get('AffectingYear')} "
+                                    f"No. {el.get('AffectingNumber')}"})
+    return effects
+
+
+def _path_citation(path: str) -> str | None:
+    """Map a legislation.gov.uk provision-URI tail to our stored citation key."""
+    seg = path.split("/")
+    if seg[0] == "part" and len(seg) == 2:
+        return f"CDPA 1988 Part {seg[1]}"
+    if seg[0] == "section" and len(seg) == 2:
+        return f"CDPA 1988 s. {seg[1]}"
+    if seg[0] == "schedule" and len(seg) == 2:
+        return f"CDPA 1988 Schedule {seg[1]}"
+    if seg[0] == "schedule" and len(seg) == 4 and seg[2] == "paragraph":
+        return f"CDPA 1988 Schedule {seg[1]} para. {seg[3]}"
+    return None                                           # e.g. crossheadings — not provisions
+
+
+def _apply_unapplied_effects(conn, iid: int, effects: list[dict]) -> int:
+    """Set has_unapplied_effects on the CURRENT versions inside each affected scope
+    (the anchor provision + its whole subtree), and clear it everywhere else — the flag
+    always mirrors the snapshot's own metadata, so it self-corrects once the effect is
+    applied by the editors. Historic (is_current=0) versions are never touched."""
+    ids: set[int] = set()
+    for eff in effects:
+        for path in eff["paths"]:
+            cit = _path_citation(path)
+            row = conn.execute("SELECT id FROM provisions WHERE instrument_id=? AND citation=?",
+                               (iid, cit)).fetchone() if cit else None
+            if not row:
+                print(f"  ! unapplied effect scope not resolved to a provision: "
+                      f"'{path}' ({eff['desc']}) — flag NOT set; check manually")
+                continue
+            for (pid,) in conn.execute(
+                    "WITH RECURSIVE sub(id) AS (SELECT ? UNION ALL "
+                    "SELECT p.id FROM provisions p JOIN sub ON p.parent_id=sub.id) "
+                    "SELECT id FROM sub", (row[0],)):
+                ids.add(pid)
+    conn.execute("UPDATE versions SET has_unapplied_effects=0 "
+                 "WHERE instrument_id=? AND is_current=1 AND has_unapplied_effects=1", (iid,))
+    n = 0
+    if ids:
+        qs = ",".join("?" * len(ids))
+        cur = conn.execute(
+            f"UPDATE versions SET has_unapplied_effects=1 "
+            f"WHERE instrument_id=? AND is_current=1 AND provision_id IN ({qs})",
+            (iid, *ids))
+        n = cur.rowcount
+    return n
+
+
+def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
     root = ET.parse(xml_path).getroot()
     records: list[dict] = []
     seen: dict[str, int] = {}          # deterministic citation-uniqueness guard
@@ -206,7 +291,7 @@ def parse(xml_path: str) -> tuple[str, list[dict]]:
                 walk(c, parent_local, container_cite, sec_cite, subpath, group_title, in_sched, sched_no)
 
     walk(root, None, None, None, [], None, False, None)
-    return INSTRUMENT["title"], records
+    return INSTRUMENT["title"], records, _parse_unapplied_effects(root)
 
 
 # ── DB writers (idempotent) — same contract as ingest_uslm ──────────────────
@@ -287,7 +372,7 @@ def ingest(db_path, xml_path, source_url, point_in_time=None, allow_corpus=False
     if os.path.basename(db_path) == "corpus.db" and not allow_corpus:
         raise SystemExit("refusing to write the live corpus.db (schema pending sign-off). "
                          "Pass --allow-corpus only after the migration is approved.")
-    title, records = parse(xml_path)
+    title, records, effects = parse(xml_path)
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
     _require_migration(conn)
@@ -306,6 +391,8 @@ def ingest(db_path, xml_path, source_url, point_in_time=None, allow_corpus=False
         if r["content"]:
             outcome = _store_version(conn, iid, pid, r, source_url, point_in_time)
             stats["versions_new" if outcome == "new" else "versions_unchanged"] += 1
+    # Surface the snapshot's own "amendment not yet applied" metadata (prime rule 3).
+    stats["unapplied_flagged"] = _apply_unapplied_effects(conn, iid, effects)
     conn.commit()
     conn.close()
     stats.update(instrument_id=iid, title=title)
@@ -326,6 +413,8 @@ def main() -> None:
     print(f"  Body sections         : {s['sections']}")
     print(f"  Schedule paragraphs   : {s['schedule_paras']}  (role='schedule', separate class)")
     print(f"  versions              : new {s['versions_new']}, unchanged {s['versions_unchanged']}")
+    print(f"  unapplied effects     : {s['unapplied_flagged']} current versions flagged "
+          f"(has_unapplied_effects, from ukm:UnappliedEffects RequiresApplied=\"true\")")
 
 
 if __name__ == "__main__":

@@ -16,6 +16,21 @@ import sqlite3
 # Instruments re-based onto a consolidated (not-authentic) edition — see ingest_eu_consolidated.
 _CONSOLIDATED = {"32001L0029", "32006L0116", "31996L0009"}
 
+# Wave C (2f audit, 2026-08-16) source_edition overrides — per-source facts NOT derivable from
+# `type`/flags, kept here so a backfill re-run reproduces them (regenerable, not a hand edit):
+#   ca-c-42           → official     (Justice Laws consolidations are official for evidentiary
+#                                     purposes since 2009-06-01 — the site's own Important Note)
+#   au-copyright-1968 → official     (Federal Register of Legislation is the authoritative
+#                                     register, Legislation Act 2003 (Cth) ss 15B/15ZA; corpus
+#                                     holds the current registered compilation)
+#   ukpga/1988/48     → consolidated (TNA's official revised edition — an official
+#                                     consolidation, not a mere finding aid; not as-enacted)
+# SG (sg-copyright-2021) is deliberately ABSENT: its relabel to official is PENDING a manual
+# check of the SSO authority statement (sso.agc.gov.sg 403s scripted fetch). IN stays
+# finding_aid (Gazette of India controls; India Code is an as-is departmental consolidation).
+_SOURCE_EDITION_OVERRIDES = {"ca-c-42": "official", "au-copyright-1968": "official",
+                             "ukpga/1988/48": "consolidated"}
+
 
 def backfill(db_path: str) -> None:
     c = sqlite3.connect(db_path)
@@ -49,6 +64,7 @@ def backfill(db_path: str) -> None:
                 P, SE = 1, "finding_aid"               # enacted positive law → Code text = legal evidence
             else:
                 SE = "translation" if offlang == 0 else "finding_aid"
+        SE = _SOURCE_EDITION_OVERRIDES.get(i["ext_id"], SE)   # Wave C relabels survive re-runs
         c.execute("UPDATE instruments SET authority=?, positive_law=?, source_edition=?, court_level=? "
                   "WHERE id=?", (A, P, SE, CL, i["id"]))
         n += 1
