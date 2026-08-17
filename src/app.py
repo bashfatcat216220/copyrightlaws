@@ -364,6 +364,12 @@ def _format_body(content, heading=None):
     return [p for p in paras if p["text"]]
 
 
+# legislation.gov.uk's whole-provision repeal marker: a body that is JUST the provision
+# number followed by a dotted leader ("5 . . . . . . ."). Used to distinguish a dot-wall
+# tombstone (→ "[Repealed]" label) from a repealed provision that carries a real notice.
+_DOTTED_LEADER = re.compile(r"\s*\d+[A-Za-z]*\.?\s*(\.\s*){4,}\.?\s*")
+
+
 def _incipit(content, limit=90):
     """A short text preview for provisions that carry NO source heading (e.g. Brazilian /
     French articles are numbered but not titled). Shown in the index/rail so the list isn't a
@@ -382,21 +388,16 @@ def _incipit(content, limit=90):
 def _fill_incipits(conn, rows):
     """Attach `incipit` to any leaf dict lacking a heading, from its current version text.
 
-    Exception — repealed tombstones: legislation.gov.uk renders a fully-repealed provision's
+    Exception — dot-wall tombstones: legislation.gov.uk renders a fully-repealed provision's
     body as `number + dotted leader` ("5 . . . . . . ."), so ~32 heading-less repealed CDPA
-    provisions would preview as a wall of dots. When the row carries `status='repealed'` AND
-    has no source heading, show a muted "[Repealed]" UI label instead of the incipit. Keyed
-    STRICTLY on the human/ingest-set `status` column — never on what the text looks like —
-    so heading-less LIVE provisions (BR/FR articles) keep their real incipit, and a live
-    provision can never be labelled repealed. "[Repealed]" is a UI label, not asserted law:
-    the reading pane still shows the source's verbatim dotted leader + the rust badge."""
+    provisions would preview as a wall of dots. For a row that is `status='repealed'` AND whose
+    body is JUST that dotted leader, show a muted "[Repealed]" UI label instead. Gated on BOTH
+    the ingest-set `status` column (so a live BR/FR article can never be labelled repealed) AND
+    the dotted-leader body shape — so a repealed provision that carries a real repeal NOTICE
+    ("Ss. 31C-31E repealed (1.6.2014) by…") KEEPS that informative notice as its preview (rule 2:
+    surface the source's own notice). "[Repealed]" is a UI label, not asserted law: the reading
+    pane still shows the source's verbatim dotted leader + the rust badge."""
     need = [r for r in rows if not (r.get("heading") or "").strip()]
-    if not need:
-        return
-    for r in need:
-        if r.get("status") == "repealed":
-            r["incipit"] = "[Repealed]"
-    need = [r for r in need if "incipit" not in r]
     if not need:
         return
     ids = [r["id"] for r in need]
@@ -404,7 +405,11 @@ def _fill_incipits(conn, rows):
         "SELECT provision_id, content FROM versions WHERE is_current=1 AND provision_id IN "
         f"({','.join('?' * len(ids))})", ids).fetchall())
     for r in need:
-        r["incipit"] = _incipit(got.get(r["id"]))
+        content = got.get(r["id"])
+        if r.get("status") == "repealed" and _DOTTED_LEADER.fullmatch(content or ""):
+            r["incipit"] = "[Repealed]"
+        else:
+            r["incipit"] = _incipit(content)
 
 
 def _chapter_index(conn, iid, chap):
