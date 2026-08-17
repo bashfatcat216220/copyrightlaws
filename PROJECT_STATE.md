@@ -27,6 +27,66 @@ _Last updated: 2026-08-16._
 > = `binding` (0 NULL), cases = `precedent`. Attorney-driven (Copyright Office makes both binding
 > 37 C.F.R. rules AND non-binding guidance). See CLAUDE.md prime rule 3a.
 
+## NEXT UP — remaining 2f/2g audit waves C, D, E (do in this order)
+
+_Source of detail: `AUDIT-FINDINGS-2026-08-16.md`. Waves A+B (the HIGH+MED missing back-matter)
+are DONE + pushed (`62c6d68`). These three remain. Discipline: each item scratch-validated on a
+sqlite-backup clone before central load (CLAUDE rule 9); risky writes gate on Bing's review (prime
+rule 2); use fable agents READ-ONLY for audits/verification, a write-capable agent for ingests._
+
+### Wave C — 2f relabels + honesty fixes (metadata only, NO new law text)
+- **CA (id 6)** `source_edition` finding_aid → **official** (Justice Laws is official for evidentiary
+  purposes since 2009-06-01).
+- **AU (id 7)** finding_aid → **official** (Federal Register of Legislation is the authoritative register,
+  Legislation Act 2003 ss 15B/15ZA; corpus already holds the current compilation).
+- **UK CDPA (id 2)** finding_aid → **consolidated** (TNA official revised edition). Do NOT re-ingest
+  (it carries point-in-time versions + fired alerts) — metadata-only update.
+- **IN (id 9)** keep finding_aid; add an instrument note ("authoritative text = Gazette of India;
+  India Code is an as-is departmental consolidation; indiacode.nic.in blocks scripted refresh").
+- **SG (id 10)** relabel → official **PENDING manual check** (SSO 403s scripted fetch — can't verify
+  the authority statement without a human opening the page).
+- **NL (id 8)** add source-vintage caveat **~2012**; **IT (id 18)** add caveat **~2003** (extend
+  `SOURCE_VINTAGE` in `src/app.py`; FR ~2006 and ES ~2012 already present).
+- **37 C.F.R. (id 19)** reserved sections carry `status='in_force'` → should be `unknown` (or add a
+  `reserved` status via migration); fix instrument title "Parts 201–212" → "Parts 200–235".
+- **REAL BUG — UK CDPA `has_unapplied_effects` never set (prime rule 3).** The current CLML snapshot
+  carries a live `RequiresApplied="true"` effect (SI 2026/103, Pt 2) but all 1,597 versions read 0;
+  `ingest_clml.py` never parses the `ukm` effects metadata. Wire it in + flag affected Pt 2 versions.
+- (LOW) `is_authentic=1` on all 10 translations contradicts `is_official_language=0` — schema-semantics
+  review. EU `amendments` table is empty though ≥3 amendment events exist — populate as provenance
+  metadata only (do NOT feed the change monitor — cross-manifestation re-base is not an amendment).
+
+### Wave D — authentic-text ingests (real new law)
+- **EU InfoSoc 2001/29 (id 3):** we hold only the editorial consolidation as enacting text — the ONLY
+  `is_authentic=1` rows are its 61 recitals. Ingest the **authentic original articles** (+ the 2
+  amendment layers: 2017/1564, 2019/790). Authentic original text is already on disk
+  (`spike/artifacts/infosoc_oj.html`, `infosoc_act.xml`).
+- **EU Term 2006/116 (id 23):** Art 10a exists only as consolidation text → ingest amending act
+  **2011/77** (authentic OJ L 265) for the authentic layer, or at minimum an amendments row.
+- **37 C.F.R. (id 19):** add an **additive official GPO annual CFR baseline** as a pinned point-in-time
+  version (GPO bulk XML `https://www.govinfo.gov/bulkdata/CFR/2025/title-37/CFR-2025-title37-vol1.xml`,
+  fetch verified) — keep the eCFR as the current working text; label stays honest.
+- (LOW) 17 U.S.C. (id 1): fix the dead `bulkdata/USCODE` URL in `src/connectors/govinfo_us.py`;
+  optionally cross-ref the GPO `USCODE-<yr>-title17` package as an authoritative manifestation.
+
+### Wave E — LOW cleanups + data-quality + reader surfacing
+- **EU codification annexes:** Software 2009/24 (id 21), Term 2006/116 (id 23), Rental 2006/115 (id 24)
+  each have Annex I/II (repealed-directive list + transposition dates + correlation table) — ingest
+  like Orphan Works (kind='schedule'). Non-substantive apparatus but referenced by the final articles.
+- **ES TRLPI (id 15):** capture the RDL 1/1996 wrapper (Single Article / **Single Repeal** (operative
+  derogatoria) / Single Final) or document its exclusion in `ingest_es.py`.
+- **UK CDPA Schedule 8 (id 2):** content-less stub — attach the repeals-table text OR add a documented
+  exclusion note (currently silent).
+- **Footnote-bleed trims:** Berne Appendix Art VI (id 4) swallowed ~1,350 chars of WIPO editorial
+  footnotes incl. quoted 1896-treaty text (MED — re-segment before the `<hr>`); Rome Art 34 (id 29),
+  WCT Art 25 (id 27), WPPT Art 33 (id 28) each swallowed a small "Source: WIPO" endnote (LOW).
+- **JP (id 14) Chapter VIII sort defect:** Arts 123/124 sort before 120-2/121-2/122-2 (sort-key fix).
+- **Reader surfacing (View 1):** the chapter-INDEX landing page (e.g. `/instrument/6`) has no
+  "Schedules" group — top-level childless schedules (CA Schedule I/II/III) surface in the reader rail +
+  search + deep-link but not the default chapter list. Add a Schedules group to `_chapter_index`
+  (`_CONTAINER_KINDS` currently excludes schedules). [The reader-RAIL surfacing (View 2) is already done.]
+- (LOW) Optionally dedupe/link the repeated WCT/WPPT agreed-statement recital rows.
+
 ## Where we are (one breath)
 
 > **Full 18-jurisdiction validity audit (6 fable agents, 2026-08-14) → `AUDIT-FINDINGS-2026-08-14.md`
