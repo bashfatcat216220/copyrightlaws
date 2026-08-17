@@ -211,6 +211,13 @@ def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
                           role=role, citation=cite, content=None)
                 walk(c, lid, cite, None, [], None, in_sched, sched_no)
             elif name == "Schedule":
+                # NOTE (Wave E, 2f/2g audit #11): Schedule 8 (Repeals) has NO P1/P2 paragraph
+                # structure — its whole body is one <Tabular> (a 3-column repeals table), which
+                # this walker does not inline, so the row below stays a content-less container.
+                # Its table text is attached by the TARGETED `backfill_cdpa_sch8.py` (kept out
+                # of this parser deliberately: inlining <Tabular> corpus-wide would change many
+                # provisions' text on the next nightly refresh and fire false change alerts —
+                # rule 7: CDPA is point-in-time monitored, fixes must be surgical).
                 sib += 1
                 num = (_txt(_child(c, "Number")) or f"SCHEDULE {sib}").replace("SCHEDULE", "").strip()
                 label = f"Schedule {num}"

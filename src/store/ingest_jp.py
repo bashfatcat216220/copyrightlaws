@@ -13,10 +13,11 @@ authentic, consolidated rendering of the Act as amended (is_authentic=1, is_cons
 Structure (from the clean HTML on view/3379/en):
     Chapter I..VIII → Section N → Subsection N → Article N
 Not every chapter has sections/subsections; an article hangs off its nearest open container.
-Articles carry hyphenated insertions (Article 30-2, Article 122-2) — handed to
-`_common.ordinal`, which keys off the leading integer and falls back to document order for
-the hyphen part (authoritative from the single fetch). Articles RAIL in the reader
-(kind='article', operative content); containers are chapter/section/subsection.
+Articles carry hyphenated insertions (Article 30-2, Article 122-2) — handed to `_jp_ordinal`,
+which sorts an insertion after its base article and before the next integer
+((120,'') < (120,'-02') < (121,''), branch zero-padded for the BINARY collation). Articles
+RAIL in the reader (kind='article', operative content); containers are
+chapter/section/subsection.
 
 Scope: the Act's OPERATIVE MAIN BODY (Chapters I–VIII, Articles 1–124) PLUS the trailing
 "Supplementary Provisions" (附則) blocks — the original 1970 Act's 附則 plus one block per
@@ -94,6 +95,20 @@ def _clean(frag: str) -> str:
     return re.sub(r"\s+", " ", htmlmod.unescape(frag)).strip()
 
 
+def _jp_ordinal(num: str, doc_index: int) -> tuple[int, str]:
+    """Sort key for a Japanese article number, incl. hyphenated insertions ('120-2').
+    `_common.ordinal` can't read the hyphen form and fell back to DOCUMENT ORDER, which
+    filed the insertions after the whole chapter (Ch. VIII read 119…124, then 120-2,
+    121-2, 122-2 — the Wave-E sort defect). An inserted article must sort AFTER its base
+    and BEFORE the next integer: (120,'') < (120,'-02') < (121,''). The branch is
+    zero-padded so '-10' sorts after '-09' under the column's pinned BINARY collation
+    (Art. 104-10 exists)."""
+    m = re.match(r"^(\d+)(?:-(\d+))?$", num or "")
+    if not m:
+        return doc_index, ""
+    return int(m.group(1)), (f"-{int(m.group(2)):02d}" if m.group(2) else "")
+
+
 def _suppl_citation(block_id: str, label: str) -> str:
     """Block container citation, disambiguated by amending act/date. The original 1970 Act's
     own 附則 → the enacting act; a labelled amendment → its Act No. + year; a bare '[Extract]'
@@ -147,7 +162,7 @@ def _parse_supplementary(html: str, rs: RecordSet) -> None:
                 if at:
                     inner = _ART_TITLE.sub(" ", inner, count=1)
                 content = _clean(inner) or None
-                si, su = ordinal(num, ai)
+                si, su = _jp_ordinal(num, ai)
                 rs.add(parent_local=cid, kind="schedule_para", label=f"Article {num}",
                        heading=heading, sort_int=si, sort_suffix=su, role="schedule",
                        citation=f"{cite} Art. {num}", content=content)
@@ -214,7 +229,7 @@ def parse(html_path: str) -> RecordSet:
         inner = _ART_TITLE.sub(" ", inner, count=1)
         content = _clean(inner) or None
         parent = container["subsection"] or container["section"] or container["chapter"]
-        si, su = ordinal(num, i)                        # hyphenated (30-2) → int + doc-order fallback
+        si, su = _jp_ordinal(num, i)                    # hyphenated (30-2) → (30, '-02')
         rs.add(parent_local=parent, kind="article", label=f"Article {num}", heading=heading,
                sort_int=si, sort_suffix=su, citation=f"Copyright Act (Japan) Art. {num}",
                content=content)

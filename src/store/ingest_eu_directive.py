@@ -251,68 +251,139 @@ _ANNEX_SORT_BASE = 10000
 _ANNEX_NUM = re.compile(r'<p\b[^>]*class="(?:oj-)?normal"[^>]*>\s*\((\d+)\)\s*</p>')
 
 
+def _cell_clean(frag: str) -> str:
+    """Table-cell text, KEEPING link text (annex cells carry their OJ references inside
+    <a> tags — real source text, unlike the footnote anchors _clean drops in article
+    bodies). Superscript footnote MARKERS (`<span class="oj-super">N</span>`, usually
+    wrapped in an <a>) are apparatus and are dropped as a unit."""
+    frag = re.sub(r'(?:<a\b[^>]*>\s*)?<span class="oj-super">.*?</span>(?:\s*</a>)?',
+                  " ", frag, flags=re.S)
+    frag = re.sub(r"<[^>]+>", " ", frag)
+    txt = re.sub(r"\s+", " ", htmlmod.unescape(frag)).strip()
+    return re.sub(r"\(\s*\)", "", txt).strip()                # a marker-only "( )" leftover
+
+
+def _linearize_annex_tables(region: str) -> str:
+    """Flatten a codification annex region (headings + <table> apparatus) to plain text,
+    verbatim and in document order. Tables (repealed-directive lists, transposition
+    time-limits, correlation tables) are linearized row by row, cells joined with ' — '
+    (a presentation separator only — every word is the source's). A correlation table
+    printed as ONE row of two parallel <p>-lists (Term/Rental Annex II) is re-paired by
+    paragraph index — the source's own visual row alignment, no words added. Heading
+    paragraphs (PART A/B, table captions) become their own lines; the leading ANNEX title
+    paragraph is dropped (it is the container's label, not body)."""
+    lines: list[str] = []
+    seen_title = [False]                                      # only the FIRST doc-ti is the label
+
+    def paras_between(chunk: str) -> None:
+        for pm in re.finditer(r"<p\b[^>]*class=\"([^\"]*)\"[^>]*>(.*?)</p>", chunk, re.S):
+            if "doc-ti" in pm.group(1) and not seen_title[0]:  # ANNEX title → container label
+                seen_title[0] = True                           # (a later doc-ti, e.g. Rental
+                continue                                       # "CORRELATION TABLE", is body)
+            t = _cell_clean(pm.group(2))
+            if t:
+                lines.append(t)
+
+    pos = 0
+    for tm in re.finditer(r"<table\b.*?</table>", region, re.S):
+        paras_between(region[pos:tm.start()])
+        for rm in re.finditer(r"<tr\b[^>]*>(.*?)</tr>", tm.group(0), re.S):
+            cell_paras = [
+                [_cell_clean(p) for p in
+                 re.findall(r"<p\b[^>]*>(.*?)</p>", cm.group(1), re.S)]
+                for cm in re.finditer(r"<td\b[^>]*>(.*?)</td>", rm.group(1), re.S)]
+            if (len(cell_paras) == 2 and len(cell_paras[0]) == len(cell_paras[1])
+                    and len(cell_paras[0]) > 1):              # parallel-list correlation row
+                for left, right in zip(*cell_paras):
+                    pair = " — ".join(x for x in (left, right) if x)
+                    if pair:
+                        lines.append(pair)
+                continue
+            row = " — ".join(" ".join(x for x in ps if x).strip()
+                             for ps in cell_paras if any(ps))
+            if row:
+                lines.append(row)
+        pos = tm.end()
+    paras_between(region[pos:])
+    return "\n".join(lines).strip()
+
+
 def parse_annex(h: str, short: str) -> list[dict]:
-    """Orphan-Works Annex (Article 3(2) minimum diligent-search sources).
+    """Annexes from the MODERN EUR-Lex `<div … id="anx_*">` containers. Two shapes:
 
-    Scoped to the MODERN EUR-Lex annex container `<div ... id="anx_N">…</div>` — the
-    ONLY shape carrying an addressable numbered-source list in this family. The codified
-    directives (Software/Rental/Term) instead put their annexes in `oj-doc-ti` heading
-    blocks (repealed-directive lists + correlation tables — a different, later wave); they
-    have no `anx_*` div, so this stage is inert for them and returns []. Database and
-    Enforcement (legacy OJ) have no annex at all.
+    * Orphan Works (`anx_1`): a numbered diligent-search source list — one container dict
+      carrying `points` (each becomes a kind='schedule_para' child).
+    * The codified directives Software 2009/24 / Term 2006/116 / Rental 2006/115
+      (`anx_I`/`anx_II`): Annex I (repealed directive + transposition time-limits, Parts
+      A/B) and Annex II (correlation table) — non-substantive codification apparatus, but
+      referenced by the directives' final articles, so captured verbatim as ONE
+      kind='schedule' container each (tables linearized, no numbered points → no children).
 
-    Returns a list with one container dict (kind 'schedule') carrying `points`, each a
-    numbered sub-point dict (kind 'schedule_para'). Body text is verbatim from the fetched
-    page (prime rule 1); the leading '(N)' marker is dropped only because the citation
-    already carries the number. Segmentation is bounded to the annex div — it does not run
-    into the page footer/script block (which follows `<hr class="oj-doc-end">`)."""
-    dm = re.search(r'<div\b[^>]*id="(anx_\d+)"[^>]*>', h)
-    if not dm:
-        return []
-    body_start = dm.end()
-    # Bound the annex to its own container: stop at the document-end rule (which precedes
-    # the <script> footer). Never let it bleed into the page scripts/footer.
-    end = h.find('<hr', body_start)
-    if end == -1:
-        end = h.find('</body>', body_start)
-    if end == -1:
-        end = len(h)
-    region = h[body_start:end]
-    # Strip any script/style defensively before working with the fragment.
-    region = re.sub(r"<script\b[^>]*>.*?</script>", " ", region, flags=re.S)
-    region = re.sub(r"<style\b[^>]*>.*?</style>", " ", region, flags=re.S)
+    Database 96/9 and Enforcement 2004/48 (legacy OJ) have no annex — inert, returns [].
+    Body text is verbatim from the fetched page (prime rule 1); segmentation is bounded to
+    each annex div (next `anx_*` div / the first `<hr>` document-end rule), so it never
+    bleeds into a sibling annex or the page footer/scripts."""
+    divs = list(re.finditer(r'<div\b[^>]*id="anx_([0-9IVX]+)"[^>]*>', h))
+    out: list[dict] = []
+    for di, dm in enumerate(divs):
+        body_start = dm.end()
+        # Bound the annex to its own container: the next annex div, else the document-end
+        # rule (which precedes the <script> footer). Never bleed into scripts/footer.
+        end = divs[di + 1].start() if di + 1 < len(divs) else -1
+        if end == -1:
+            end = h.find('<hr', body_start)
+        if end == -1:
+            end = h.find('</body>', body_start)
+        if end == -1:
+            end = len(h)
+        region = h[body_start:end]
+        # Strip any script/style defensively before working with the fragment.
+        region = re.sub(r"<script\b[^>]*>.*?</script>", " ", region, flags=re.S)
+        region = re.sub(r"<style\b[^>]*>.*?</style>", " ", region, flags=re.S)
 
-    # Container heading is the annex title paragraph; intro is the first oj-normal line.
-    intro_m = re.search(r'<p\b[^>]*class="(?:oj-)?normal"[^>]*>(.*?)</p>', region, re.S)
-    intro = _clean(intro_m.group(1)) if intro_m else ""
+        # Label from the source's own ANNEX title paragraph ("ANNEX" / "ANNEX I").
+        tm = re.search(r'<p\b[^>]*class="(?:oj-)?doc-ti"[^>]*>(.*?)</p>', region, re.S)
+        title = _clean(tm.group(1)) if tm else "Annex"
+        rn = re.match(r"ANNEX\s*([IVX]+)?", title, re.I)
+        roman = (rn.group(1) or "").upper() if rn else ""
+        label = f"Annex {roman}".strip()
 
-    # Split on the top-level numbered markers; each point body runs to the next marker.
-    marks = [(m.group(1), m.start()) for m in _ANNEX_NUM.finditer(region)]
-    if not marks:
-        return []
-    points: list[dict] = []
-    for i, (num, pos) in enumerate(marks):
-        seg_end = marks[i + 1][1] if i + 1 < len(marks) else len(region)
-        text = _clean(region[pos:seg_end])
-        # Drop the redundant leading "(N)" marker; keep the rest verbatim.
-        text = re.sub(r"^\(\d+\)\s*", "", text)
-        if text:
-            points.append(dict(num=int(num), text=text))
-    if not points:
-        return []
-
-    # Container content = intro line + the numbered points (verbatim), so the schedule row
-    # is self-contained and searchable even without expanding its children.
-    container_parts = [intro] if intro else []
-    for p in points:
-        container_parts.append(f"({p['num']}) {p['text']}")
-    container_text = "\n".join(container_parts).strip() or None
-    return [dict(heading="Annex", intro=intro, content=container_text, points=points)]
+        # Split on top-level numbered markers (Orphan Works); each point runs to the next.
+        marks = [(m.group(1), m.start()) for m in _ANNEX_NUM.finditer(region)]
+        if marks:
+            # Container heading = annex title; intro = the first oj-normal line.
+            intro_m = re.search(r'<p\b[^>]*class="(?:oj-)?normal"[^>]*>(.*?)</p>', region, re.S)
+            intro = _clean(intro_m.group(1)) if intro_m else ""
+            points: list[dict] = []
+            for i, (num, mpos) in enumerate(marks):
+                seg_end = marks[i + 1][1] if i + 1 < len(marks) else len(region)
+                text = _clean(region[mpos:seg_end])
+                # Drop the redundant leading "(N)" marker; keep the rest verbatim.
+                text = re.sub(r"^\(\d+\)\s*", "", text)
+                if text:
+                    points.append(dict(num=int(num), text=text))
+            if not points:
+                continue
+            # Container content = intro + the numbered points (verbatim), so the schedule
+            # row is self-contained and searchable even without expanding its children.
+            container_parts = [intro] if intro else []
+            for p in points:
+                container_parts.append(f"({p['num']}) {p['text']}")
+            out.append(dict(label=label, heading=label,
+                            content="\n".join(container_parts).strip() or None,
+                            points=points))
+        else:
+            # Codification annex — headings + tables, no addressable numbered list.
+            content = _linearize_annex_tables(region)
+            if content:
+                out.append(dict(label=label, heading=label, content=content, points=[]))
+    return out
 
 
 def parse(html_path: str, celex: str) -> RecordSet:
     """Build a RecordSet: recitals (top-level) + chapters (containers) + articles
-    (+ the Annex, where the source carries an `anx_*` container — Orphan Works only)."""
+    (+ Annexes, where the source carries `anx_*` containers — Orphan Works' numbered
+    diligent-search list and the Software/Term/Rental codification Annexes I/II)."""
     d = DIRECTIVES[celex]
     short = d["short_num"]
     h = open(html_path, encoding="utf-8").read()
@@ -347,22 +418,30 @@ def parse(html_path: str, celex: str) -> RecordSet:
 
     for ai, annex in enumerate(parse_annex(h, short)):
         base = _ANNEX_SORT_BASE + ai * 100
+        alabel = annex["label"]
         container = rs.add(
-            kind="schedule", label="Annex", heading=annex["heading"],
+            kind="schedule", label=alabel, heading=annex["heading"],
             sort_int=base, sort_suffix="", role="schedule",
-            citation=f"Directive {short} Annex", content=annex["content"])
+            citation=f"Directive {short} {alabel}", content=annex["content"])
         for p in annex["points"]:
-            rs.add(kind="schedule_para", label=f"Annex ({p['num']})", heading=None,
+            rs.add(kind="schedule_para", label=f"{alabel} ({p['num']})", heading=None,
                    sort_int=base + p["num"], sort_suffix="", role="schedule",
                    parent_local=container,
-                   citation=f"Directive {short} Annex ({p['num']})", content=p["text"])
+                   citation=f"Directive {short} {alabel} ({p['num']})", content=p["text"])
     return rs
 
 
 def ingest_one(db_path: str, celex: str, html_path: str, source_url: str,
-               allow_corpus: bool = False) -> dict:
+               allow_corpus: bool = False, annex_only: bool = False) -> dict:
     inst = _instrument(celex)
     rs = parse(html_path, celex)
+    if annex_only:
+        # Targeted back-matter load (Wave E): keep ONLY the annex schedule records. Needed
+        # for Term 2006/116, whose ARTICLES have been re-based onto the 2011-10-31
+        # consolidated manifestation — a full re-run of this original-act ingest would
+        # clobber them back to pre-2011 text. Filtering preserves local ids, and every
+        # schedule_para's parent container precedes it, so run_ingest wiring still holds.
+        rs.records = [r for r in rs.records if r["kind"] in ("schedule", "schedule_para")]
     stats = run_ingest(db_path, inst, rs, source_url, allow_corpus=allow_corpus,
                        is_authentic=1, is_consolidated=0, is_official_language=1,
                        version_label="EUR-Lex (original OJ act)",
@@ -387,6 +466,9 @@ def main() -> None:
     ap.add_argument("--source-url", help="provenance URL (defaults to the EUR-Lex act URL)")
     ap.add_argument("--citation", help="override official_citation (default from registry)")
     ap.add_argument("--title", help="override full title (default from registry)")
+    ap.add_argument("--annex-only", action="store_true",
+                    help="upsert ONLY the annex schedule records (safe for Term 2006/116, "
+                         "whose articles are re-based onto the consolidated text)")
     ap.add_argument("--allow-corpus", action="store_true", help="permit writing the live corpus.db")
     a = ap.parse_args()
 
@@ -408,10 +490,13 @@ def main() -> None:
         source_url = a.source_url if (a.celex and a.source_url) else _default_source_url(celex)
         if not os.path.exists(html_path):
             print(f"!! {celex}: artifact missing ({html_path}) — skipping"); continue
-        s = ingest_one(a.db, celex, html_path, source_url, a.allow_corpus)
+        s = ingest_one(a.db, celex, html_path, source_url, a.allow_corpus,
+                       annex_only=a.annex_only)
         oc = DIRECTIVES[celex]["official_citation"]
+        scheds = s["by_kind"].get("schedule", 0)
         print(f"#{s['instrument_id']:>3}  {oc:22s} CELEX {celex}: "
-              f"{s['articles']} articles, {s['recitals']} recitals, {s['chapters']} chapters  "
+              f"{s['articles']} articles, {s['recitals']} recitals, {s['chapters']} chapters, "
+              f"{scheds} annexes  "
               f"(versions new {s['versions_new']}, unchanged {s['versions_unchanged']})")
 
 

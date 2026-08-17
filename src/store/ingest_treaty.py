@@ -248,11 +248,15 @@ _PDF_AS_HEAD = re.compile(
 def _parse_wipo_pdf(path: str, cite_prefix: str) -> RecordSet:
     raw = open(path, encoding="utf-8", errors="replace").read()
     lines = raw.split("\n")
-    # locate article heading lines; stop the ARTICLE run at "Note: The agreed statements" — the
-    # Agreed Statements that follow are ingested separately as their own interpretive provisions.
+    # locate article heading lines; stop the ARTICLE run at the WIPO editorial trailer — the
+    # "* Entry into force: … / Source: International Bureau of WIPO." endnote precedes the
+    # "Note: The agreed statements" boundary and is apparatus, not treaty text (rules 3/4:
+    # the LAST article must not swallow it). The Agreed Statements that follow are ingested
+    # separately as their own interpretive provisions.
     stop = len(lines)
     for j, ln in enumerate(lines):
-        if re.match(r"\s*Note:\s*The agreed statements", ln):
+        if re.match(r"\s*\*\s*Entry into force:", ln) or \
+                re.match(r"\s*Note:\s*The agreed statements", ln):
             stop = j
             break
     heads: list[tuple[int, str, str]] = []
@@ -307,6 +311,7 @@ def _parse_pdf_agreed_statements(rs: RecordSet, cite_prefix: str, lines: list[st
         if n == expected:
             seq.append((j, n))
             expected += 1
+    seen: set[tuple[str, str]] = set()
     for idx, (j, n) in enumerate(seq):
         end = seq[idx + 1][0] if idx + 1 < len(seq) else len(lines)
         block = [ln.replace("\x0c", "") for ln in lines[j + 1:end]
@@ -316,6 +321,15 @@ def _parse_pdf_agreed_statements(rs: RecordSet, cite_prefix: str, lines: list[st
         if not hm:
             continue
         art_ref, body = hm.group(1), hm.group(2)
+        # DEDUPE (Wave E): the PDF's endnote apparatus repeats the SAME agreed statement once
+        # per article that carries its footnote marker (WPPT "Articles 2(e), 8, 9, 12, and 13"
+        # appears 5×, byte-identical). One adopted statement = one provision — skip an exact
+        # (reference, text) repeat. A genuinely distinct second statement about the same
+        # article(s) (WPPT Article 15 has two, with different text) is NOT a repeat and keeps
+        # the RecordSet's deterministic #N disambiguator.
+        if (art_ref, text) in seen:
+            continue
+        seen.add((art_ref, text))
         # store the FULL statement verbatim ("Agreed statement concerning Article N: <body>")
         _add_agreed_statement(rs, cite_prefix, n, art_ref, text)
 
