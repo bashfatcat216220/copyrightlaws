@@ -17,6 +17,7 @@
     :root{
       --ink:#15171b; --body:#22252a; --body-muted:#474b52; --label:#74797f; --faint:#a7abb1;
       --paper:#ffffff; --paper-warm:#f7f6f3; --paper-warm2:#f2f0eb;
+      --paper-rail:#f9f8f5;  /* left nav rails — between the cream (--paper-warm2) and page white */
       --rule:#d9d5cd; --rule-light:#e8e5df;
       --navy:#17457e; --rust:#98401b;
       --chrome-line:#3a3e44; --chrome-border:#454a51; --chrome-faint:#6c7178; --chrome-mute:#8d9298; --chrome-soft:#a7abb1;
@@ -65,7 +66,7 @@
 
     /* ── Shell: jurisdiction rail + main ──────────────────────────────── */
     .shell{display:flex; align-items:stretch; min-height:calc(100vh - 118px);}
-    .rail{width:252px; flex:none; background:var(--paper-warm2); border-right:1px solid var(--rule);}
+    .rail{width:252px; flex:none; background:var(--paper-rail); border-right:1px solid var(--rule);}
     .rail .rgroup{font-family:var(--mono); font-weight:500; font-size:9px; letter-spacing:0.15em;
       text-transform:uppercase; color:var(--label); padding:16px 18px 8px;}
     .rail .rgroup.first{border-bottom:1px solid var(--rule);}
@@ -94,7 +95,7 @@
     .jcard .jk{font-family:var(--mono); font-size:11px; letter-spacing:0.04em; color:var(--faint);}
 
     /* ── View 1: chapter index (chapter rail + 2-column section grid) ──── */
-    .chaprail{width:392px; flex:none; background:var(--paper-warm); border-right:1px solid var(--ink);
+    .chaprail{width:392px; flex:none; background:var(--paper-rail); border-right:1px solid var(--ink);
       overflow-y:auto;}
     .chaprail .rhdr{font-family:var(--mono); font-weight:500; font-size:9px; letter-spacing:0.16em;
       text-transform:uppercase; color:var(--label); padding:16px 22px 12px; border-bottom:1px solid var(--ink);}
@@ -180,7 +181,7 @@
     td.mono{font-family:var(--mono); font-size:11.5px; color:var(--label);}
 
     /* ── Section rail (provisions: chapter-grouped sections) ──────────── */
-    .secrail{width:340px; flex:none; background:var(--paper-warm2); border-right:1px solid var(--rule);
+    .secrail{width:340px; flex:none; background:var(--paper-rail); border-right:1px solid var(--rule);
       overflow-y:auto;}
     .secrail-back{display:block; font-family:var(--mono); font-size:12px; letter-spacing:0.06em;
       color:var(--navy); padding:16px 22px; border-bottom:1px solid var(--rule);}
