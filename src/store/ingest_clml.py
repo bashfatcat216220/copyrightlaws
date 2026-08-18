@@ -29,6 +29,13 @@ NUM_RE = re.compile(r"^\s*(\d+)([A-Za-z]*)\s*$")
 # "fair dealing with a . . . work") does NOT match — those provisions stay in force.
 DOTTED_TOMBSTONE = re.compile(r"\s*\d+[A-Za-z]*\.?\s*(\.\s*){4,}\.?\s*")
 
+# A SUB-PARAGRAPH repealed in place: its whole body is `label + dotted leader` where the
+# label may be ALPHA (s.205B(1)(cc) → "cc . . . ."), numeric (s.13A(3) → "3 . . . ."), or
+# mixed (Sch. 2 para. 3A → "3A . . . ."). Distinct from DOTTED_TOMBSTONE (leading DIGIT only)
+# because sub-item labels are often letters. fullmatch-only — an embedded ". . ." inside real
+# sub-item text never matches, so a partially-omitted live sub-item is left in force.
+SUBITEM_DOTTED = re.compile(r"\s*[0-9A-Za-z]+\.?\s*(\.\s*){4,}\.?\s*")
+
 
 def is_tombstone(el, content: str | None) -> bool:
     """Detect a fully repealed/omitted provision from the source's own two signals:
@@ -205,6 +212,18 @@ def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
         txt = commentaries.get(ref.get("Ref"))
         return txt if txt and re.search(r"\b(repeal|revok|omitt|cease)", txt, re.I) else None
 
+    def subitem_notice(c) -> str | None:
+        """The repeal/omission notice keyed to a repealed-in-place SUB-paragraph. Unlike
+        repeal_notice (first ref only — fine for a whole-provision stub), scan ALL of the
+        sub-item's <CommentaryRef>s: the repeal ref is not always first (the <Pnumber> may
+        carry an insertion ref too), so return the first commentary that reads as a repeal."""
+        for ref in c.iter():
+            if local(ref.tag) == "CommentaryRef":
+                txt = commentaries.get(ref.get("Ref"))
+                if txt and re.search(r"\b(repeal|revok|omitt|cease)", txt, re.I):
+                    return txt
+        return None
+
     def add(**kw) -> int:
         # KNOWN REFINEMENT: some CDPA schedule paragraphs still collide on citation (schedule
         # sub-structure the pinpoint doesn't yet capture). Disambiguate deterministically so a
@@ -327,12 +346,24 @@ def parse(xml_path: str) -> tuple[str, list[dict], list[dict]]:
                 si, su = ordinal(num, sib)
                 newsub = subpath + [num]
                 cite = (sec_cite or "CDPA 1988 s.") + "".join(f"({x})" for x in newsub)
-                # Sub-level provisions can be individually repealed too — honor the source's
-                # Status attribute (they store no content, so the dotted-body signal is N/A here).
+                # A sub-paragraph repealed IN PLACE prints as a dotted leader inside an otherwise
+                # in-force section (s.205B(1)(cc) → "cc . . . ."). The source keeps the slot and
+                # keys the repeal notice to the sub-item's <CommentaryRef> ("S. 205B(1)(cc)
+                # repealed (31.7.2017) by Digital Economy Act 2017…"). We NEVER edit the section's
+                # flattened body — it keeps the source's VERBATIM dots and is point-in-time
+                # monitored (rule 7 / prime rule 1). Instead we record the repeal as SUB-ITEM
+                # METADATA (status + the notice in `heading`, a non-versioned column) so the reader
+                # can surface the source's own notice where the dots are, without a content/sha
+                # write that would fire a false change alert.
+                sub_body = _operative_text(c)                 # label + body (dots for a repealed one)
+                sub_status, sub_heading = "in_force", None
+                if is_tombstone(c, None) or SUBITEM_DOTTED.fullmatch(sub_body or ""):
+                    sub_status = "repealed"
+                    sub_heading = subitem_notice(c)           # the keyed source notice, or None
                 lid = add(parent_local=parent_local, kind=PLEVEL[name], label=f"({num})",
-                          heading=None, sort_int=si, sort_suffix=su,
+                          heading=sub_heading, sort_int=si, sort_suffix=su,
                           role="schedule" if in_sched else "enacting", citation=cite, content=None,
-                          status="repealed" if is_tombstone(c, None) else "in_force")
+                          status=sub_status)
                 walk(c, lid, container_cite, sec_cite, newsub, None, in_sched, sched_no)
             else:
                 walk(c, parent_local, container_cite, sec_cite, subpath, group_title, in_sched, sched_no)

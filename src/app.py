@@ -285,7 +285,16 @@ def _section_reader(conn, iid, sec):
     sel = dict(sel) if sel else None
     if sel:
         sel["slug"] = pid2slug.get(sel_id)                    # canonical deep link for this provision
-        sel["body"] = _format_body(sel.get("content"), sel.get("heading"))
+        # Sub-paragraphs repealed IN PLACE render as a dotted leader in the flattened body; pull
+        # their source repeal notices (stored as sub-item metadata by the ingest) keyed by label
+        # so _format_body can surface "(cc) [S. 205B(1)(cc) repealed …]" in place of the dots.
+        notes = {lbl.strip("()"): note for lbl, note in conn.execute(
+            "WITH RECURSIVE sub(id) AS (SELECT ? UNION ALL "
+            "  SELECT p.id FROM provisions p JOIN sub ON p.parent_id=sub.id) "
+            "SELECT label, heading FROM provisions "
+            "WHERE id IN (SELECT id FROM sub) AND status='repealed' AND heading IS NOT NULL",
+            (sel_id,))}
+        sel["body"] = _format_body(sel.get("content"), sel.get("heading"), notes)
         sel["nver"] = conn.execute("SELECT COUNT(*) FROM versions WHERE provision_id=?",
                                    (sel_id,)).fetchone()[0]
         sel["history"] = [dict(r) for r in conn.execute(
@@ -310,6 +319,11 @@ def _section_reader(conn, iid, sec):
                 span = span.strip()
                 if span:
                     op, _, txt = span.partition(" ")
+                    # a redline span that is only a dotted leader is an in-place repeal captured
+                    # by the diff — show a muted marker, not a raw dot-wall (the body already
+                    # carries the full "[… repealed by …]" notice via _annotate_repealed_subitems).
+                    if _PURE_DOTTED_LEADER.fullmatch(txt):
+                        txt = "[repealed]"
                     spans.append((op, txt))
             sel["redline_spans"] = spans
     return rail, sel
@@ -331,12 +345,38 @@ _MARK_SPLIT = re.compile(r"(?<=\s)(\((?:[a-z]{1,2}|\d{1,3}|[A-Z]|[ivxl]{1,4})\))
 _XREF = re.compile(r"^(of|or|and|to|through|shall|hereof|thereof|but|nor)\b", re.I)
 
 
-def _format_body(content, heading=None):
+# A sub-paragraph repealed in place prints as its label followed by a dotted leader. In CDPA's
+# flattened body the label is BARE ("…; cc . . . . d paragraph 3…"), not parenthesised, and the
+# dotted run (spaced dots) is the distinctive marker. `_annotate_repealed_subitems` swaps that
+# label+dots for the source's own keyed repeal notice, driven by the {label: notice} map so it
+# works for every label shape (cc, 3, 3A, …) regardless of _MARK_SPLIT.
+_PURE_DOTTED_LEADER = re.compile(r"\s*(?:\.\s*){4,}\.?\s*")
+
+
+def _annotate_repealed_subitems(txt, notes):
+    """Replace each 'label . . . .' in-place-repeal marker with the source's keyed notice,
+    bracketed so it reads as the editorial annotation it is (never asserted as statutory text).
+    The stored section body is untouched — this is display-only over a copy."""
+    if not notes:
+        return txt
+    for label, note in notes.items():
+        if not note:
+            continue
+        # the bare (or parenthesised) label immediately before a 4+ spaced-dot leader
+        pat = re.compile(r"(?<![\w.])\(?" + re.escape(label) + r"\)?\s*(?:\.\s*){4,}\.?")
+        txt = pat.sub(f"{label} [{note}]", txt, count=1)
+    return txt
+
+
+def _format_body(content, heading=None, notes=None):
     """Split flat section text into [{mark, text}] paragraphs (KM body structure). A numbered
     marker '(N)' only opens a paragraph when it CONTINUES THE SEQUENCE — an out-of-sequence
     '(N)' is a cross-reference in the prose ('as defined in subsection (2)') and stays inline,
     so numbering isn't thrown off (esp. German Absätze). This is a DISPLAY heuristic over text
-    stored as one blob; the robust fix is per-subsection storage (PROJECT_STATE depth layer c)."""
+    stored as one blob; the robust fix is per-subsection storage (PROJECT_STATE depth layer c).
+
+    `notes` (sub-item label -> repeal notice) surfaces the source's own repeal notice where a
+    repealed-in-place sub-paragraph would otherwise show a bare dotted leader (s.205B(1)(cc))."""
     if not content:
         return []
     txt = content.strip()
@@ -344,6 +384,7 @@ def _format_body(content, heading=None):
         pos = txt.find(heading.strip())
         if 0 <= pos <= 40:
             txt = txt[pos + len(heading.strip()):].lstrip(" .—:—")
+    txt = _annotate_repealed_subitems(txt, notes)          # dotted in-place repeals -> source notice
     toks = _MARK_SPLIT.split(" " + txt)                    # leading space so a '(1)' at position 0 is matched
     paras, mark, cur = [], "", [toks[0]]
     exp_num = 1                                             # next expected top-level '(N)'
