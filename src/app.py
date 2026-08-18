@@ -492,9 +492,13 @@ def _chapter_index(conn, iid, chap):
     leaves = [r for r in rows if (r["kind"] in _LEAF_KINDS
               and not (r["kind"] == "section" and r["id"] in _art_parents))
               or (r["kind"] == "schedule" and r["id"] in _sched_bodied)]
-    # width (in ch) of the widest provision number in a grid — the section-number column is
-    # sized to this so numbers and titles line up in a fixed spot regardless of number length.
-    numw = lambda g: max((len(r["label"]) for r in g), default=5) + 1
+    # width (in ch) of the widest provision NUMBER in a grid — the number column is sized to this
+    # so numbers and titles line up regardless of number length. Size to short numeric labels
+    # only and cap it: a flat treaty (WPPT) mixes 'Article 12' with 59-char 'Agreed Statement
+    # concerning Articles …' recital labels, which would otherwise blow the gutter out to 60ch and
+    # shove every article title across the row. Long-label items render as full-width title rows
+    # (see instrument.html), so they don't need this gutter.
+    numw = lambda g: min(max((len(r["label"]) for r in g if len(r["label"]) <= 16), default=5) + 1, 16)
     pid2slug, _ = _slug_map(conn, iid)                        # stable deep-link slugs for the grid
     for r in leaves:
         r["slug"] = pid2slug.get(r["id"])
