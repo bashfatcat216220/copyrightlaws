@@ -4,6 +4,23 @@
 
 _Last updated: 2026-08-18._
 
+> **CDPA sub-paragraph in-place repeals — surfaced with source notices, LOADED to BOTH DBs, 2026-08-18 (`05d37aa`).**
+> Follow-up to a user report of an inline "wall of dots" in s.205B(1) ("cc . . . . d"). Root cause: a sub-paragraph
+> repealed IN PLACE (s.205B(1)(cc), s.9(2)(c), Sch. 2 para. 3A, …) prints in legislation.gov.uk's consolidated text
+> as a bare dotted leader while the real repeal notice is keyed to the sub-item's `<CommentaryRef>` ("S. 205B(1)(cc)
+> repealed (31.7.2017) by Digital Economy Act 2017 (c. 30), s. 34(2)(a)(iii); S.I. 2017/765"). The ingest kept the
+> dots but dropped the note → ~70 sub-items across ~50 sections rendered as dot-walls with no citation/date. Fix is
+> **metadata-only / monitor-safe** (the section body — which is point-in-time monitored — keeps its VERBATIM dots,
+> rule 7 / prime rule 1): `ingest_clml` now sets `status='repealed'` + the keyed notice in `heading` on the sub-item
+> row (durable); the reader (`_annotate_repealed_subitems`, label-driven → handles cc/3/3A) splices the notice in
+> place of the dots at render, and a redline span that is only a dotted leader collapses to a muted `[repealed]`.
+> Migration `006_cdpa_subitem_repeals.py` applied to BOTH DBs: **72 sub-items → repealed (70 with a notice, 2
+> verbatim-dots only — Sch. 4 para. 37(1)/48(1)); CDPA repealed 61→133; versions/sha/alerts byte-identical**. Verified:
+> change monitor **A/B-identical with vs without the migration (0 alerts attributable)**; reader shows the notice on
+> s.205B/s.9/s.31A with **0 dot-walls**; pytest 6/6. Local `main` only — NOT pushed. **Pre-existing, unrelated:** the
+> monitor would fire **146 uncaught alerts** on corpus.db from earlier loads (proven independent of this change) — a
+> separate cleanup, deliberately NOT run here.
+
 > **Reader UI: in-place (PJAX) navigation — COMMITTED to local `main`, 2026-08-18 (`3af9629`).**
 > Resumed an interrupted change (machine died mid-session 2026-08-17) found as the sole uncommitted
 > file, `templates/base.html`. The bottom-of-page script now swaps `<main>` in place via `fetch` for
