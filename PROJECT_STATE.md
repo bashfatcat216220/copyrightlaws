@@ -2,7 +2,20 @@
 
 > Status comes from THIS file, read fresh. Do not answer "where are we" from memory.
 
-_Last updated: 2026-08-17._
+_Last updated: 2026-08-18._
+
+> **Reader UI: in-place (PJAX) navigation — COMMITTED to local `main`, 2026-08-18 (`3af9629`).**
+> Resumed an interrupted change (machine died mid-session 2026-08-17) found as the sole uncommitted
+> file, `templates/base.html`. The bottom-of-page script now swaps `<main>` in place via `fetch` for
+> internal link clicks and same-origin GET forms (top search) instead of full page reloads — no white
+> flash between pages. Left-rail scroll is preserved with a per-INSTRUMENT key (section-to-section no
+> longer resets it); breadcrumb, corpus counts, and active-nav highlight are synced from the fetched
+> document; Back/Forward restore scroll via manual `scrollRestoration` + `popstate`. Falls back to a
+> normal full-page load when fetch/History/DOMParser are unavailable or on any error. **Front-end only —
+> no DB/corpus/schema writes.** Verified in headless Chromium over CDP, **9/9**: link click + search-form
+> submit swap in place (a `window` marker survives = no reload), URL + `<main>` + breadcrumb update, Back
+> restores the prior page in-place, no JS exceptions; server logged 200s (only a favicon 404). Local
+> `main` only — NOT pushed.
 
 > **CDPA repealed-tombstone + dotted-heading fix — LOADED to BOTH DBs, 2026-08-17 (2 fable agents + orchestrator).**
 > Follow-up to a user report of a "wall of dots" in the CDPA reader sidebar. Two root causes, both from
