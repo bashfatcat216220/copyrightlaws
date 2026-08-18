@@ -316,18 +316,109 @@
      their own left rail (chapter rail → View 1, section rail → View 2). #}
   <main class="main">{% block body %}{% endblock %}</main>
 
-  {# Preserve the left rail's scroll position across section/chapter selection (full-page
-     navigation would otherwise snap it back to the top). Keyed per instrument path. #}
+  {# Site-wide navigation enhancement. Two jobs:
+     (1) Preserve the left rail's scroll position across section/chapter selection on instrument
+         pages. Keyed per INSTRUMENT (not per pathname) — every section has its own path, so a
+         per-path key would reset the rail to the top on every click.
+     (2) Progressive enhancement: swap <main> in place for ANY internal navigation instead of a
+         full page reload, so there's no white flash between pages. On instrument pages the rail
+         keeps its exact scroll (no after-paint jump); window scroll resets on forward nav and is
+         restored on Back.
+     Falls back to normal full-page navigation when fetch/History is unavailable or on any error. #}
   <script>
     (function () {
-      var rail = document.querySelector('.secrail, .chaprail');
-      if (!rail) return;
-      var key = 'rail:' + location.pathname;
-      var saved = sessionStorage.getItem(key);
-      if (saved !== null) rail.scrollTop = parseInt(saved, 10) || 0;
-      rail.addEventListener('scroll', function () {
-        sessionStorage.setItem(key, rail.scrollTop);
-      }, { passive: true });
+      // Per-instrument key so the rail scroll survives section-to-section navigation.
+      function railKey() {
+        var m = location.pathname.match(/^\/instrument\/\d+/);
+        return 'rail:' + (m ? m[0] : location.pathname);
+      }
+      function currentRail() { return document.querySelector('.secrail, .chaprail'); }
+
+      // Restore + track the rail's scroll for the current page (no-op when there's no rail).
+      function wireRail() {
+        var rail = currentRail();
+        if (!rail) return;
+        var key = railKey();
+        var saved = sessionStorage.getItem(key);
+        if (saved !== null) rail.scrollTop = parseInt(saved, 10) || 0;
+        rail.addEventListener('scroll', function () {
+          sessionStorage.setItem(key, rail.scrollTop);
+        }, { passive: true });
+      }
+      wireRail();
+
+      if (!window.fetch || !window.history || !window.DOMParser) return;
+      if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+      var loadToken = 0;
+      // Swap <main> for the document at `url`. push=true → forward nav (pushState + scroll top);
+      // push=false → popstate (restore the recorded scroll). Any failure falls back to a real load.
+      function swap(url, push, restoreY) {
+        var token = ++loadToken;
+        var leavingY = window.scrollY;
+        fetch(url, { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('bad status');
+            return r.text();
+          })
+          .then(function (html) {
+            if (token !== loadToken) return;   // a newer navigation superseded this one
+            var doc = new DOMParser().parseFromString(html, 'text/html');
+            var next = doc.querySelector('main.main');
+            var oldMain = document.querySelector('main.main');
+            if (!next || !oldMain) { location.href = url; return; }
+            oldMain.replaceWith(next);          // swap DOM…
+            wireRail();                         // …restore rail scroll BEFORE paint (no jump)
+            // Keep the surrounding chrome in sync with the new document.
+            function sync(sel) {
+              var s = doc.querySelector(sel), d = document.querySelector(sel);
+              if (s && d) d.innerHTML = s.innerHTML;
+            }
+            sync('.crumbbar .crumb');           // breadcrumb
+            sync('.crumbbar .counts');          // corpus counts
+            sync('.topnav');                    // active-nav highlight
+            if (doc.title) document.title = doc.title;
+            if (push) {
+              // Record where we were so Back can restore it, then push the new entry.
+              history.replaceState({ pjax: true, scrollY: leavingY }, '', location.href);
+              history.pushState({ pjax: true, scrollY: 0 }, '', url);
+              window.scrollTo(0, 0);
+            } else if (restoreY != null) {
+              window.scrollTo(0, restoreY);
+            }
+          })
+          .catch(function () { location.href = url; });
+      }
+
+      // Intercept plain left-clicks on internal links. Leave new-tab / modified clicks,
+      // downloads, cross-origin, and in-page anchors to the browser.
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey ||
+            e.shiftKey || e.altKey) return;
+        var a = e.target.closest && e.target.closest('a');
+        if (!a || !a.getAttribute('href')) return;
+        if (a.target === '_blank' || a.hasAttribute('download')) return;
+        if (a.origin !== location.origin) return;
+        if (a.getAttribute('href').charAt(0) === '#') return;   // in-page anchor
+        if (a.href === location.href) { e.preventDefault(); return; }
+        e.preventDefault();
+        swap(a.href, true);
+      });
+
+      // Same-origin GET forms (e.g. the top search box) swap in place too.
+      document.addEventListener('submit', function (e) {
+        var f = e.target;
+        if (!f || (f.method || 'get').toLowerCase() !== 'get') return;
+        var u = new URL(f.getAttribute('action') || location.pathname, location.origin);
+        if (u.origin !== location.origin) return;
+        u.search = new URLSearchParams(new FormData(f)).toString();
+        e.preventDefault();
+        swap(u.href, true);
+      });
+
+      window.addEventListener('popstate', function (e) {
+        swap(location.href, false, e.state ? e.state.scrollY : null);
+      });
     })();
   </script>
 </body>
