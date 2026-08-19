@@ -36,7 +36,12 @@ _Last updated: 2026-08-19._
 > are title-cased for DISPLAY via a `smart_title` Jinja filter — stored heading stays verbatim (navigational,
 > not monitored text); only fully-uppercase strings are touched, small words lowercased;
 > (3) a flat instrument's default "Articles" bucket titles the page with the INSTRUMENT'S OWN name (H1) instead
-> of a generic "Articles" (`sel_chap=None` → H1 falls back to `inst.title`). **Deferred:** make the restored
+> of a generic "Articles" (`sel_chap=None` → H1 falls back to `inst.title`);
+> (4) the **reader rail (View 2) number gutter** now caps `rail_numw` to short labels (≤14ch → cap 14),
+> the same e836a0d fix the View-1 grid got — one long descriptive label (MX "Transitional Article Seventh",
+> Berne "Appendix Article VI") was inflating the gutter to ~29ch for every row, leaving an inch of dead space
+> after each short number and smashing the title into a tall-wrapping column; long labels now lead a
+> full-width `.secrow.titlerow`. **Deferred:** make the restored
 > structure durable in `ingest_treaty`/`ingest_eu_directive` (migrations are the current idempotent mechanism);
 > Rome stays intentionally railless (single article bucket — a 1-item rail would be degenerate).
 

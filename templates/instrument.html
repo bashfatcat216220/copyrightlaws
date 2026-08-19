@@ -109,11 +109,17 @@
     {% for grp in rail %}
       <div class="secrail-chap">{{ grp.chap_label or 'Provisions' }}</div>
       {% for s in grp.sections %}
-        <a class="secrow {{ 'active' if s.active }}" href="{% if s.slug %}/instrument/{{ inst.id }}/{{ s.slug }}{% else %}/instrument/{{ inst.id }}?sec={{ s.id }}{% endif %}">
-          <span class="secnum">{{ s.label }}</span>
-          {% if s.heading %}<span class="secttl">{{ s.heading }}</span>
-          {% elif s.incipit %}<span class="secttl incipit">{{ s.incipit }}</span>
-          {% else %}<span class="secttl">—</span>{% endif %}
+        <a class="secrow{{ ' titlerow' if s.label|length > rail_numw }} {{ 'active' if s.active }}" href="{% if s.slug %}/instrument/{{ inst.id }}/{{ s.slug }}{% else %}/instrument/{{ inst.id }}?sec={{ s.id }}{% endif %}">
+          {% if s.label|length > rail_numw %}
+            {# long descriptive label (e.g. 'Transitional Article Seventh') — no short number, so
+               let the label lead a full-width row instead of overflowing the number gutter #}
+            <span class="secttl"><span class="secnum-lead">{{ s.label }}</span>{% if s.heading %} — {{ s.heading }}{% elif s.incipit %} — <span class="incipit">{{ s.incipit }}</span>{% endif %}</span>
+          {% else %}
+            <span class="secnum">{{ s.label }}</span>
+            {% if s.heading %}<span class="secttl">{{ s.heading }}</span>
+            {% elif s.incipit %}<span class="secttl incipit">{{ s.incipit }}</span>
+            {% else %}<span class="secttl">—</span>{% endif %}
+          {% endif %}
         </a>
       {% endfor %}
     {% endfor %}
