@@ -676,14 +676,7 @@ def _render_instrument(request: Request, iid: int, tab: str,
                vintage_note=note or None)
     if inst and has_prov and sec is not None:              # View 2 — section reader
         rail, sel = _section_reader(conn, iid, sec)
-        # Number-gutter width, in ch — sized to SHORT numeric labels only and capped, exactly like
-        # the View-1 grid (commit e836a0d). Otherwise one long descriptive label (MX
-        # "Transitional Article Seventh", Berne "Appendix Article VI") blows the gutter out to ~29ch
-        # for EVERY row, leaving a wide empty gap after short numbers and smashing the title into a
-        # narrow, tall-wrapping column. Long-label rows render full-width instead (see instrument.html).
-        rail_numw = min(max((len(s["label"]) for grp in (rail or []) for s in grp["sections"]
-                             if len(s["label"]) <= 14), default=6) + 1, 14)
-        ctx.update(view="reader", rail=rail, sel=sel, rail_numw=rail_numw,
+        ctx.update(view="reader", rail=rail, sel=sel,
                    cases=(sel.get("cases") if sel else []))
     elif inst and has_prov:                                # View 1 — chapter index
         ctx.update(view="index", ci=_chapter_index(conn, iid, chap))

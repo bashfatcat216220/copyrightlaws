@@ -38,10 +38,12 @@ _Last updated: 2026-08-19._
 > (3) a flat instrument's default "Articles" bucket titles the page with the INSTRUMENT'S OWN name (H1) instead
 > of a generic "Articles" (`sel_chap=None` → H1 falls back to `inst.title`);
 > (4) the **reader rail (View 2) number gutter** now caps `rail_numw` to short labels (≤14ch → cap 14),
-> the same e836a0d fix the View-1 grid got — one long descriptive label (MX "Transitional Article Seventh",
-> Berne "Appendix Article VI") was inflating the gutter to ~29ch for every row, leaving an inch of dead space
-> after each short number and smashing the title into a tall-wrapping column; long labels now lead a
-> full-width `.secrow.titlerow`. **Deferred:** make the restored
+> the same e836a0d fix the View-1 grid got. **Superseded same day by (5):** the reader rail (`.secrow`) is now
+> **stacked** — the provision number leads its own line and the title/incipit flows FULL-WIDTH beneath it,
+> instead of a side-by-side number gutter that (in a 340px rail) crushed long titles/incipits into a narrow,
+> tall-wrapping column or cut them off. Number left-aligned (scans better than centred); the `rail_numw`
+> gutter/`titlerow` machinery is removed as unnecessary. Reads cleanly for both heading rows (CDPA "s. 1 /
+> Copyright and copyright works.") and heading-less incipit rows (MX/France). **Deferred:** make the restored
 > structure durable in `ingest_treaty`/`ingest_eu_directive` (migrations are the current idempotent mechanism);
 > Rome stays intentionally railless (single article bucket — a 1-item rail would be degenerate).
 
