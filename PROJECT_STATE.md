@@ -4,6 +4,15 @@
 
 _Last updated: 2026-08-18._
 
+> **Reader UI: instrument-index number-gutter width fix — COMMITTED to local `main`, 2026-08-18 (`e836a0d`).**
+> Follow-up to a misaligned-column look on a flat treaty (WPPT): it lists `Article 12`-style items alongside
+> `Agreed Statement concerning Articles …` recital labels (~59 chars) in the same index grid. `numw` sized the
+> number gutter to the WIDEST label, so it ballooned to ~60ch and shoved every article title to the middle of
+> the row. Fix (`src/app.py` `_chapter_index`): `numw` now sizes to SHORT numeric labels only (`len <= 16`) and
+> is capped at 16ch; long-label items render as full-width title rows (`.secitem.titlerow`, `templates/instrument.html`)
+> instead of overflowing the gutter. **Front-end only — no DB/corpus/schema/version/sha writes; monitor untouched.**
+> Chaptered instruments unchanged (CDPA `numw` 8, EU 10). Local `main` only — NOT pushed.
+
 > **CDPA sub-paragraph in-place repeals — surfaced with source notices, LOADED to BOTH DBs, 2026-08-18 (`05d37aa`).**
 > Follow-up to a user report of an inline "wall of dots" in s.205B(1) ("cc . . . . d"). Root cause: a sub-paragraph
 > repealed IN PLACE (s.205B(1)(cc), s.9(2)(c), Sch. 2 para. 3A, …) prints in legislation.gov.uk's consolidated text
