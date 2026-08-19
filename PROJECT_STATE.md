@@ -2,7 +2,35 @@
 
 > Status comes from THIS file, read fresh. Do not answer "where are we" from memory.
 
-_Last updated: 2026-08-18._
+_Last updated: 2026-08-19._
+
+> **Uniform instrument landing page — every flat treaty/directive now rails like the chaptered ones, 2026-08-19.**
+> Bing's ask: make the reader's left sidebar uniform across all subpages (the chaptered CDPA landing —
+> chapters rail + 2-column numbered grid — was the gold standard; flat treaties had NO rail and looked
+> barren/left-shifted). Root diff: 22 chaptered instruments render a Parts rail from stored containers;
+> ~9 flat treaties/EU-directives were ingested as a bare article list (the ~81 US **cases** are a separate
+> page type, no provisions → untouched). Two-track fix, grounded in the SOURCE artifacts (prime rule 1 —
+> no fabricated structure):
+> * **Real structure RESTORED where the source has it** — TRIPS Parts I–VII + Part II/III Sections
+>   (migration `007_trips_parts.py`, parsed from `trips_wto.html`; caught Art. 31bis), and WPPT Chapters I–V
+>   (`008_wppt_chapters.py`, from `wppt_wipolex.txt`). Both STRUCTURE-ONLY: insert kind='part'/'section'/
+>   'chapter' rows + re-parent articles; NO content/sha/version/is_current writes → monitor + 91 alerts
+>   untouched; versions 6776 byte-identical; global-doc-order sort_int keeps View 1 (top-level rail) and
+>   View 2 (immediate-parent rail) both correct, mirroring CDPA's Part→Chapter. Idempotent. **Applied to
+>   BOTH DBs.**
+> * **Presentational rail for genuinely-flat instruments** (`_chapter_index`, app.py — NO DB writes, no
+>   invented law): when an instrument has no stored containers, the landing groups its leaves by their OWN
+>   roles — Recitals / Articles / Appendix / **Agreed Statements** (treaties store these as recitals;
+>   detected by the "Agreed Statement…" label and ordered after Articles) / Schedules — mirroring how View 2
+>   already grouped them. Berne → Articles + Appendix; WCT/Beijing/Marrakesh → Articles + Agreed Statements;
+>   EU Software/Term/Orphan → Recitals + Articles + Annex; landing defaults to the Articles bucket. A
+>   single-bucket instrument (Rome — 34 articles, no recitals/annex) keeps the plain grid (a 1-item rail
+>   would be degenerate) — the one remaining railless page.
+> Verified: pytest 6/6; chaptered instruments unchanged; TRIPS/WPPT/Berne/WCT/EU-Software render the rail at
+> desktop width matching CDPA. Local `main` only — NOT pushed. **Follow-up (deferred):** make the structure
+> durable in `ingest_treaty`/`ingest_eu_directive` (migrations are the current, idempotent mechanism); the
+> generic "N SECTIONS" rail sub-label reads oddly under an "Articles"/"Recitals" group (site-wide wording).
+
 
 > **Reader UI: instrument-index number-gutter width fix — COMMITTED to local `main`, 2026-08-18 (`e836a0d`).**
 > Follow-up to a misaligned-column look on a flat treaty (WPPT): it lists `Article 12`-style items alongside

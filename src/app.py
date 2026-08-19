@@ -460,6 +460,7 @@ def _chapter_index(conn, iid, chap):
     leaves. `chap` selects a chapter (defaults to the first) — it may be a stable slug string
     ('ch-1') OR, for backward compatibility, a legacy int container row id."""
     cid2slug, slug2cid = _chapter_slug_map(conn, iid)         # stable chapter-rail slugs
+    chap_raw = chap if isinstance(chap, str) else None        # kept for the flat pseudo-rail below
     if isinstance(chap, str):                                 # resolve a slug → container id …
         chap = slug2cid.get(chap) or slug2cid.get(chap.lower()) or \
             (_SCHED_SEL if chap.lower() == _SCHED_SEL else None) or \
@@ -503,10 +504,54 @@ def _chapter_index(conn, iid, chap):
     for r in leaves:
         r["slug"] = pid2slug.get(r["id"])
     tops = [r for r in rows if r["parent_id"] is None and r["kind"] in _CONTAINER_KINDS]
-    if not tops:                                            # flat instrument — no chapter rail
-        grid = sorted(leaves, key=key)
+    if not tops:
+        # No stored containers (a flat treaty/directive). Rather than leave the landing page
+        # railless, synthesize a presentational rail from the leaves' OWN roles —
+        # Recitals / Articles / Appendix / Schedules. This writes NOTHING to the DB and invents
+        # no legal structure (labels reflect what the rows already are); it mirrors how View 2
+        # (_section_reader) already groups the same flat instruments, so both views agree. An
+        # instrument with only one such bucket (e.g. Rome — articles only) keeps the plain grid.
+        FLAT_ORDER = {"recitals": 0, "provisions": 1, "appendix": 2, "agreed": 3, _SCHED_SEL: 4}
+
+        def _flat_bucket(r):
+            if r["kind"] == "recital":
+                # treaties store their Agreed Statements as recitals — those are back-matter
+                # keyed to articles, NOT the preamble; label + order them accordingly
+                if (r["label"] or "").startswith("Agreed Statement"):
+                    return ("agreed", "Agreed Statements")
+                return ("recitals", "Recitals")
+            if r["kind"] in ("schedule", "schedule_para"):
+                return (_SCHED_SEL, "Schedules")
+            if (r["label"] or "").startswith("Appendix"):     # Berne's Appendix (real back-matter)
+                return ("appendix", "Appendix")
+            return ("provisions", "Articles")
+
+        buckets: dict = {}
+        for lf in leaves:
+            gid, glabel = _flat_bucket(lf)
+            buckets.setdefault(gid, {"label": glabel, "items": []})["items"].append(lf)
+        if len(buckets) <= 1:                               # single bucket — nothing to separate
+            grid = sorted(leaves, key=key)
+            _fill_incipits(conn, grid)
+            return {"flat": True, "chapters": [], "selected": None, "sel_chap": None,
+                    "grid": grid, "numw": numw(grid)}
+        for b in buckets.values():
+            b["items"].sort(key=key)
+        # the main "Articles" bucket is labelled "Provisions" if it holds non-article leaves
+        if "provisions" in buckets and not all(
+                i["kind"] == "article" for i in buckets["provisions"]["items"]):
+            buckets["provisions"]["label"] = "Provisions"
+        ordered = sorted(buckets.items(), key=lambda kv: FLAT_ORDER.get(kv[0], 9))
+        chapters = [{"id": gid, "slug": gid, "label": b["label"], "heading": None,
+                     "n": len(b["items"]),
+                     "range": f"{b['items'][0]['label']}–{b['items'][-1]['label']}"}
+                    for gid, b in ordered]
+        sel = chap_raw if chap_raw in buckets else (
+            "provisions" if "provisions" in buckets else ordered[0][0])
+        grid = buckets[sel]["items"]
         _fill_incipits(conn, grid)
-        return {"flat": True, "chapters": [], "selected": None, "sel_chap": None,
+        return {"flat": False, "chapters": chapters, "selected": sel,
+                "sel_chap": {"label": buckets[sel]["label"], "heading": None},
                 "grid": grid, "numw": numw(grid)}
     # Wave-E View-1 fix: a schedule LEAF whose top-level ancestor is NOT a rendered container
     # (CA Schedule I–III, CDPA schedule paragraphs under top-level 'schedule' rows, JP/KR
