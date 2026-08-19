@@ -27,9 +27,18 @@ _Last updated: 2026-08-19._
 >   single-bucket instrument (Rome — 34 articles, no recitals/annex) keeps the plain grid (a 1-item rail
 >   would be degenerate) — the one remaining railless page.
 > Verified: pytest 6/6; chaptered instruments unchanged; TRIPS/WPPT/Berne/WCT/EU-Software render the rail at
-> desktop width matching CDPA. Local `main` only — NOT pushed. **Follow-up (deferred):** make the structure
-> durable in `ingest_treaty`/`ingest_eu_directive` (migrations are the current, idempotent mechanism); the
-> generic "N SECTIONS" rail sub-label reads oddly under an "Articles"/"Recitals" group (site-wide wording).
+> desktop width matching CDPA. Local `main` only — NOT pushed.
+>
+> **Rail polish (same day, follow-on):** three display-only refinements for a legal reader —
+> (1) the count sub-label is now the REAL unit, not a blanket "SECTION" (`_unit_noun` from the group's leaf
+> kind → "8 ARTICLES", "20 RECITALS", "9 AGREED STATEMENTS", "6 SECTIONS"; "provisions" for mixed);
+> (2) all-caps container headings from shouting sources (EUR-Lex DSM "GENERAL PROVISIONS", CLML "INTRODUCTORY")
+> are title-cased for DISPLAY via a `smart_title` Jinja filter — stored heading stays verbatim (navigational,
+> not monitored text); only fully-uppercase strings are touched, small words lowercased;
+> (3) a flat instrument's default "Articles" bucket titles the page with the INSTRUMENT'S OWN name (H1) instead
+> of a generic "Articles" (`sel_chap=None` → H1 falls back to `inst.title`). **Deferred:** make the restored
+> structure durable in `ingest_treaty`/`ingest_eu_directive` (migrations are the current idempotent mechanism);
+> Rome stays intentionally railless (single article bucket — a 1-item rail would be degenerate).
 
 
 > **Reader UI: instrument-index number-gutter width fix — COMMITTED to local `main`, 2026-08-18 (`e836a0d`).**

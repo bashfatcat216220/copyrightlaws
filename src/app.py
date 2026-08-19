@@ -23,6 +23,31 @@ import db  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(REPO_ROOT / "templates"))
 
+# Some sources (EUR-Lex, some CLML chapters) SHOUT their container headings in all-caps
+# ("GENERAL PROVISIONS", "MEASURES TO ADAPT EXCEPTIONS ..."), while others use normal case
+# ("Copyright"), so the rail looks inconsistent. Normalise case for DISPLAY ONLY — the stored
+# heading stays the verbatim source (headings are navigational, not monitored version text).
+# Applies only to a heading that is ENTIRELY uppercase; mixed-case source is left untouched.
+_TITLE_SMALL = {"a", "an", "the", "and", "or", "of", "to", "in", "for", "on", "with", "at",
+                "by", "from", "as", "but", "nor", "per", "via", "into", "over"}
+
+
+def _smart_title(s):
+    if not s or any(ch.islower() for ch in s) or not any(ch.isalpha() for ch in s):
+        return s                                             # not shouting → leave as-is
+    words = s.split()
+    out = []
+    for i, w in enumerate(words):
+        lw = w.lower()
+        if 0 < i < len(words) - 1 and lw in _TITLE_SMALL:
+            out.append(lw)
+        else:
+            out.append(lw[:1].upper() + lw[1:])
+    return " ".join(out)
+
+
+templates.env.filters["smart_title"] = _smart_title
+
 app = FastAPI(title="Copyright Corpus")
 
 
@@ -331,6 +356,15 @@ def _section_reader(conn, iid, sec):
 
 _LEAF_KINDS = ("section", "article", "schedule_para", "recital")
 _CONTAINER_KINDS = ("part", "subpart", "chapter", "subchapter")
+# noun for a rail group's count sub-label — a legal reader expects the real unit, not a
+# blanket "SECTION" (calling articles/recitals "sections" reads as imprecise). Mixed → 'provision'.
+_UNIT_NOUN = {"article": "article", "section": "section", "recital": "recital",
+              "schedule_para": "paragraph", "schedule": "schedule"}
+
+
+def _unit_noun(items):
+    kinds = {i["kind"] for i in items}
+    return _UNIT_NOUN.get(next(iter(kinds)), "provision") if len(kinds) == 1 else "provision"
 # Sentinel chapter-rail id/slug for the synthetic "Schedules" group in _chapter_index (View 1):
 # top-level schedules aren't _CONTAINER_KINDS, so their leaves need their own rail entry.
 _SCHED_SEL = "schedules"
@@ -541,18 +575,22 @@ def _chapter_index(conn, iid, chap):
         if "provisions" in buckets and not all(
                 i["kind"] == "article" for i in buckets["provisions"]["items"]):
             buckets["provisions"]["label"] = "Provisions"
+        UNIT_BY_BUCKET = {"recitals": "recital", "agreed": "agreed statement"}
         ordered = sorted(buckets.items(), key=lambda kv: FLAT_ORDER.get(kv[0], 9))
         chapters = [{"id": gid, "slug": gid, "label": b["label"], "heading": None,
                      "n": len(b["items"]),
+                     "unit": UNIT_BY_BUCKET.get(gid) or _unit_noun(b["items"]),
                      "range": f"{b['items'][0]['label']}–{b['items'][-1]['label']}"}
                     for gid, b in ordered]
         sel = chap_raw if chap_raw in buckets else (
             "provisions" if "provisions" in buckets else ordered[0][0])
         grid = buckets[sel]["items"]
         _fill_incipits(conn, grid)
+        # main "Articles" bucket → let the H1 be the instrument's own title (no meaningful chapter
+        # heading exists); a named bucket (Recitals/Appendix/…) titles the page with its label.
+        sel_chap = None if sel == "provisions" else {"label": buckets[sel]["label"], "heading": None}
         return {"flat": False, "chapters": chapters, "selected": sel,
-                "sel_chap": {"label": buckets[sel]["label"], "heading": None},
-                "grid": grid, "numw": numw(grid)}
+                "sel_chap": sel_chap, "grid": grid, "numw": numw(grid)}
     # Wave-E View-1 fix: a schedule LEAF whose top-level ancestor is NOT a rendered container
     # (CA Schedule I–III, CDPA schedule paragraphs under top-level 'schedule' rows, JP/KR
     # addenda blocks, EU annexes) used to group under an id the chapter rail never lists —
@@ -576,13 +614,13 @@ def _chapter_index(conn, iid, chap):
         secs = sorted(groups.get(tc["id"], []), key=key)
         chapters.append({"id": tc["id"], "slug": cid2slug.get(tc["id"]),
                          "label": tc["label"], "heading": tc["heading"],
-                         "n": len(secs),
+                         "n": len(secs), "unit": _unit_noun(secs) if secs else "provision",
                          "range": f"{secs[0]['label']}–{secs[-1]['label']}" if secs else ""})
     if sched_grid:
         sg = sorted(sched_grid, key=lambda r: (r["_topkey"], key(r)))
         groups[_SCHED_SEL] = sg
         chapters.append({"id": _SCHED_SEL, "slug": _SCHED_SEL, "label": "Schedules",
-                         "heading": None, "n": len(sg),
+                         "heading": None, "n": len(sg), "unit": _unit_noun(sg),
                          "range": f"{sg[0]['label']}–{sg[-1]['label']}"})
     sel = chap if (chap in groups) else (chapters[0]["id"] if chapters else None)
     grid = groups.get(sel, []) if sel == _SCHED_SEL else sorted(groups.get(sel, []), key=key)

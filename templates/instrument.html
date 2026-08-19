@@ -64,8 +64,8 @@
     {% for c in ci.chapters %}
       <a class="chaprow {{ 'active' if c.id == ci.selected }}" href="/instrument/{{ inst.id }}?chap={% if c.slug %}{{ c.slug }}{% else %}{{ c.id }}{% endif %}">
         <span style="flex:1; min-width:0;">
-          <span class="ct">{{ c.label }}{% if c.heading %} · {{ c.heading }}{% endif %}</span>
-          <div class="cm">{{ c.range }} · {{ c.n }} SECTION{{ '' if c.n == 1 else 'S' }}</div>
+          <span class="ct">{{ c.label }}{% if c.heading %} · {{ c.heading | smart_title }}{% endif %}</span>
+          <div class="cm">{{ c.range }} · {{ c.n }} {{ (c.unit or 'provision') | upper }}{{ '' if c.n == 1 else 'S' }}</div>
         </span>
       </a>
     {% endfor %}
@@ -76,7 +76,7 @@
     <div class="secgrid-head">
       <div>
         <div class="kick">{{ inst.official_citation or inst.jurisdiction }}{% if ci.sel_chap %} · {{ ci.sel_chap.label }}{% endif %}</div>
-        <h1>{{ (ci.sel_chap.heading if ci.sel_chap else None) or ci.sel_chap.label if ci.sel_chap else inst.title }}</h1>
+        <h1>{% if ci.sel_chap and ci.sel_chap.heading %}{{ ci.sel_chap.heading | smart_title }}{% elif ci.sel_chap %}{{ ci.sel_chap.label }}{% else %}{{ inst.title }}{% endif %}</h1>
       </div>
       <div class="rt">{{ ci.grid|length }} PROVISION{{ '' if ci.grid|length == 1 else 'S' }}</div>
     </div>
