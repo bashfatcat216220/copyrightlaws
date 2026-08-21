@@ -61,6 +61,14 @@ def _reporter_cite(cite) -> bool:
 
 templates.env.filters["reporter_cite"] = _reporter_cite
 
+# court_level display labels (vocabulary: scotus|circuit|district|other — schema.sql /
+# migration 002 comments). 'other' spans state courts, CFC, bankruptcy — a raw "| upper"
+# would shout OTHER at a reader; say what the bucket means instead.
+_COURT_LEVEL_LABEL = {"scotus": "U.S. Supreme Court", "circuit": "Court of Appeals",
+                      "district": "District Court", "other": "Other court"}
+templates.env.filters["court_level_label"] = (
+    lambda v: _COURT_LEVEL_LABEL.get(v, v or ""))
+
 app = FastAPI(title="Copyright Corpus")
 
 
@@ -150,7 +158,7 @@ def search(request: Request, q: str = ""):
                         "FROM case_fts f JOIN case_treatment ct ON ct.id=f.rowid "
                         "JOIN instruments i ON i.id=ct.case_instrument "
                         "JOIN provisions p ON p.id=ct.provision_id "
-                        "WHERE case_fts MATCH ? ORDER BY rank LIMIT 40", (toks,)):
+                        "WHERE case_fts MATCH ? ORDER BY rank LIMIT 200", (toks,)):
                     if r["case_id"] in seen:      # same opinion recorded against several sections
                         continue
                     seen.add(r["case_id"])
@@ -389,11 +397,20 @@ def _section_reader(conn, iid, sec):
         sel["history"] = [dict(r) for r in conn.execute(
             "SELECT point_in_time, retrieved_at, is_current FROM versions "
             "WHERE provision_id=? ORDER BY retrieved_at DESC", (sel_id,))]
-        sel["cases"] = [dict(r) for r in conn.execute(
-            "SELECT i.id AS case_id, i.title AS name, i.official_citation AS cite, "
-            "  i.enacted_date AS year, ct.treatment, ct.holding, ct.source_url "
-            "FROM case_treatment ct JOIN instruments i ON i.id=ct.case_instrument "
-            "WHERE ct.provision_id=? ORDER BY i.enacted_date DESC, ct.id", (sel_id,))]
+        # Most-cited first (cite_count = CourtListener's citeCount at fetch, migration 011;
+        # NULLs — pre-refetch rows — sort last), then newest. Landmarks lead the rail.
+        # Falls back to date order on a DB that predates migration 011 (no 500 on a clone).
+        _case_q = ("SELECT i.id AS case_id, i.title AS name, i.official_citation AS cite, "
+                   "  i.enacted_date AS year, ct.treatment, ct.holding, ct.source_url "
+                   "FROM case_treatment ct JOIN instruments i ON i.id=ct.case_instrument "
+                   "WHERE ct.provision_id=? ORDER BY {order}")
+        try:
+            sel["cases"] = [dict(r) for r in conn.execute(_case_q.format(
+                order="ct.cite_count IS NULL, ct.cite_count DESC, i.enacted_date DESC, ct.id"),
+                (sel_id,))]
+        except sqlite3.OperationalError:              # no cite_count column yet
+            sel["cases"] = [dict(r) for r in conn.execute(_case_q.format(
+                order="i.enacted_date DESC, ct.id"), (sel_id,))]
         for c in sel["cases"]:                                # keep court+year fallbacks out of the cite slot
             c["cite_reporter"] = _reporter_cite(c.get("cite"))
         # if this provision's current version is an alert's new_version, show the redline

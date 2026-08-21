@@ -41,14 +41,14 @@
             {% elif c.cite %}<div class="ccite" style="opacity:.55;">{{ c.cite }}</div>{% endif %}
             <div class="ctreat treat-{{ c.treatment }}">
               <span class="tlbl">{{ c.treatment }}</span>
-              {% if c.holding %}<span class="chold">{{ c.holding }}</span>{% endif %}
+              {% if c.holding %}<span class="chold"><em style="opacity:.55; font-style:normal; letter-spacing:.04em;">EXCERPT&nbsp;·</em> {{ c.holding }}</span>{% endif %}
             </div>
             {% if c.source_url %}<a class="csrc" href="{{ c.source_url }}" target="_blank" rel="noopener">CourtListener ↗</a>{% endif %}
           </div>
         {% endfor %}
         <p class="empty" style="font-size:10.5px; margin-top:14px;">Opinions citing this section
           (CourtListener full-text). "Cited" is factual; editorial treatment (followed /
-          distinguished) is not asserted.</p>
+          distinguished) is not asserted. Snippets are excerpts of opinion text, not holdings.</p>
       {% else %}
         <p class="empty">No cases linked to this section.</p>
       {% endif %}
@@ -191,7 +191,7 @@
           <h1>{{ inst.title }}</h1>
           <div class="kick" style="margin-top:8px;">
             {{ 'Precedent' if inst.authority == 'precedent' else 'Case' }}
-            {%- if inst.court_level %} · {{ inst.court_level | upper }}{% endif %}
+            {%- if inst.court_level %} · {{ inst.court_level | court_level_label | upper }}{% endif %}
             {%- if inst.official_citation and not (inst.official_citation | reporter_cite) %} · {{ inst.official_citation }}
             {%- elif inst.enacted_date %} · {{ inst.enacted_date }}{% endif %}
             {%- if inst.jurisdiction %} · {{ inst.jurisdiction }}{% endif %}

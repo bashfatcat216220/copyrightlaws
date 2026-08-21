@@ -12,7 +12,7 @@
 --   authority      : 'binding' (force of law) | 'persuasive' (no force of law) | 'precedent' (caselaw)
 --   positive_law   : 1 = enacted into positive law (Code text = legal evidence) | 0 = prima facie only | NULL = n/a
 --   source_edition : 'official' | 'finding_aid' | 'consolidated' | 'translation' | 'original_act'
---   court_level    : caselaw only — 'scotus' | 'circuit' | 'district' | 'foreign' | NULL (compute binding reach)
+--   court_level    : caselaw only — 'scotus' | 'circuit' | 'district' | 'other' | NULL (compute binding reach; 'other' = state/CFC/bankruptcy, renamed from 'foreign' 2026-08-21)
 
 ALTER TABLE instruments ADD COLUMN authority      TEXT;
 ALTER TABLE instruments ADD COLUMN positive_law   INTEGER;

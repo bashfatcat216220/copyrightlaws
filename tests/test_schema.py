@@ -128,6 +128,118 @@ def test_case_fts_sync_on_empty_db(conn):
                         ).fetchone()[0] == 0
 
 
+# --- CourtListener re-fetch (CASES-REFETCH-DESIGN rev. 2) -------------------------------
+
+def test_best_cite_prefers_official_reporter():
+    from store.ingest_cases import best_cite
+    # Harper & Row's real parallel list — official U.S. Reports must win over S.Ct./L.Ed./specialty
+    cites = ['85 L. Ed. 2d 588', '105 S. Ct. 2218', '471 U.S. 539', '1985 U.S. LEXIS 17',
+             '225 U.S.P.Q. (BNA) 1073', '53 U.S.L.W. 4562']
+    assert best_cite(cites) == '471 U.S. 539'
+    assert best_cite(['2008 WL 36630', '512 F.3d 522']) == '512 F.3d 522'
+    assert best_cite([]) is None                    # empty list -> NULL, never a minted cite
+    assert best_cite(['Court of Appeals for the First Circuit 1998']) is None  # not a cite
+
+
+def test_court_level_mapping():
+    from store.ingest_cases import court_level
+    assert court_level('scotus', 'Supreme Court of the United States') == 'scotus'
+    assert court_level('ca9', 'Court of Appeals for the Ninth Circuit') == 'circuit'
+    assert court_level('nysd', 'District Court, S.D. New York') == 'district'
+    assert court_level('ohioctapp', 'Ohio Court of Appeals') == 'other'      # state -> other
+    assert court_level('uscfc', 'United States Court of Federal Claims') == 'other'
+
+
+def test_refetch_matches_same_opinion_under_new_cluster(conn):
+    # B1: same opinion under a different CourtListener cluster must match the EXISTING
+    # instrument (merge key first, ext_id second) — never become a REMOVE+ADD pair
+    _apply_provisions_migration(conn)
+    conn.execute("INSERT INTO instruments (jurisdiction,type,title,official_citation,ext_id,"
+                 "ext_id_scheme,first_seen_at,last_updated_at) "
+                 "VALUES ('US','case','A. Geophysical v. T.','60 F.3d 913','cl-111','COURTLISTENER','t','t')")
+    existing = [dict(r) for r in conn.execute(
+        "SELECT id,title,official_citation,ext_id,court_level,authority,status,enacted_date "
+        "FROM instruments WHERE type='case'")]
+    from store.ingest_cases import match_existing
+    hit = {"cluster_id": 999, "name": "American Geophysical Union v. Texaco Inc.",
+           "citations": ["60 F.3d 913", "1995 WL 1"], "court_id": "ca2", "court_name": "x"}
+    m = match_existing(hit, existing)
+    assert m is not None and m["ext_id"] == "cl-111"   # matched by cite, despite new cluster
+
+
+def test_apply_refuses_sha_mismatch(tmp_path):
+    from store.ingest_cases import apply
+    art = tmp_path / "a.json"
+    art.write_text('{"meta": {"screen": "not_run"}, "dbs": {}}')
+    with pytest.raises(SystemExit, match="REFUSED"):
+        apply(str(tmp_path / "x.db"), str(art), approved_sha="deadbeef",
+              approved_by="tester", allow_corpus=False)
+
+
+def test_not_run_screen_blocks_relevance_removals(conn):
+    # S5/B2: with the model screen not_run, screened_irrelevant removals must be SKIPPED
+    # at apply (mechanical reasons only) — the human reviewer can't judge legal relevance
+    _apply_provisions_migration(conn)
+    import hashlib as _h
+    import json as _j
+    import db as db_mod
+    conn.execute("ALTER TABLE case_treatment ADD COLUMN cite_count INTEGER")  # migration 011
+    conn.execute("INSERT INTO instruments (jurisdiction,type,title,first_seen_at,last_updated_at) "
+                 "VALUES ('US','statute','t17x','t','t')")
+    usc = conn.execute("SELECT id FROM instruments WHERE title='t17x'").fetchone()[0]
+    conn.execute("INSERT INTO provisions (instrument_id,sort_int,label,kind,citation) "
+                 "VALUES (?,107,'§ 107','section','17 U.S.C. § 107')", (usc,))
+    pid = conn.execute("SELECT id FROM provisions WHERE instrument_id=?", (usc,)).fetchone()[0]
+    conn.execute("INSERT INTO instruments (jurisdiction,type,title,ext_id,ext_id_scheme,"
+                 "first_seen_at,last_updated_at) VALUES ('US','case','cX','cl-5','COURTLISTENER','t','t')")
+    case = conn.execute("SELECT id FROM instruments WHERE title='cX'").fetchone()[0]
+    conn.execute("INSERT INTO case_treatment (provision_id,case_instrument,treatment,holding,"
+                 "source_url,retrieved_at) VALUES (?,?,'cited','x','http://x','t')", (pid, case))
+    link_id = conn.execute("SELECT id FROM case_treatment").fetchone()[0]
+    conn.commit()
+    dbname = os.path.basename(str(db_mod.DB_PATH))
+    artifact = {"meta": {"screen": "not_run", "generated_at": "2026-08-21T00:00:00Z"},
+                "dbs": {dbname: {"usc_id": usc, "adds": [], "updates": [], "keeps": [],
+                                 "keeps_below_cap": [],
+                                 "removes": [{"link_id": link_id, "case_id": case,
+                                              "title": "cX", "section": "107",
+                                              "reason": "screened_irrelevant"}]}}}
+    body = _j.dumps(artifact)
+    art = Path(tempfile.mkdtemp()) / "a.json"
+    art.write_text(body)
+    from store.ingest_cases import apply
+    apply(str(db_mod.DB_PATH), str(art), approved_sha=_h.sha256(body.encode()).hexdigest(),
+          approved_by="tester", allow_corpus=False)
+    # the relevance-based removal was skipped: the link survives
+    assert conn.execute("SELECT COUNT(*) FROM case_treatment WHERE id=?", (link_id,)
+                        ).fetchone()[0] == 1
+
+
+def test_diff_never_auto_removes_unverifiable_link(conn):
+    # review finding: a link whose case has no parseable cl-<n> ext_id cannot be
+    # presence-verified — it must land in MANUAL (kept), never REMOVE('no_longer_returned')
+    _apply_provisions_migration(conn)
+    conn.execute("INSERT INTO instruments (jurisdiction,type,title,ext_id,first_seen_at,"
+                 "last_updated_at) VALUES ('US','statute','t17m','t17','t','t')")
+    usc = conn.execute("SELECT id FROM instruments WHERE title='t17m'").fetchone()[0]
+    conn.execute("INSERT INTO provisions (instrument_id,sort_int,label,kind,citation) "
+                 "VALUES (?,107,'§ 107','section','17 U.S.C. § 107')", (usc,))
+    pid = conn.execute("SELECT id FROM provisions WHERE instrument_id=?", (usc,)).fetchone()[0]
+    conn.execute("INSERT INTO instruments (jurisdiction,type,title,ext_id,ext_id_scheme,"
+                 "first_seen_at,last_updated_at) "
+                 "VALUES ('US','case','cM','hand-loaded','MANUAL','t','t')")
+    case = conn.execute("SELECT id FROM instruments WHERE title='cM'").fetchone()[0]
+    conn.execute("INSERT INTO case_treatment (provision_id,case_instrument,treatment,holding,"
+                 "source_url,retrieved_at) VALUES (?,?,'cited','x','http://x','t')", (pid, case))
+    from store.ingest_cases import diff_db
+    stub_calls = []
+    d = diff_db(conn, hits=[], screen_status="not_run",
+                check_presence=lambda s, ids: stub_calls.append(ids) or {})
+    assert len(d["manual"]) == 1 and d["manual"][0]["case_id"] == case
+    assert d["removes"] == []                        # never a false "verified absent"
+    assert stub_calls in ([], [[]])                  # presence never queried for a None id
+
+
 def test_matrix_verify_with_source_ok(conn):
     # a cell that cites a real source version CAN be verified
     code = conn.execute("SELECT code FROM jurisdictions LIMIT 1").fetchone()[0]

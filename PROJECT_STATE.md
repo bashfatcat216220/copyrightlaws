@@ -81,15 +81,25 @@ _Last updated: 2026-08-21._
 > stored excerpts (~600 chars each) — deeper reach rides the deferred, gated CourtListener
 > re-fetch (issue-1 banner), not more scraping here.
 >
-> **CourtListener re-fetch DESIGNED (not implemented) — `CASES-REFETCH-DESIGN-2026-08-21.md`,
-> rev. 2 after a senior-developer agent review (4 blocking findings folded in: opinion-identity
-> matching so case URLs never break; below-cap links are KEPT not removed; approval = operator-
-> pasted `--approved-sha`; declarative per-DB apply).** Fixes the four deferred case-coverage
-> defects (relevance noise, missing reporter cites, court_level 0/77, the 5-per-section cap) via
-> citeCount-ranked exact-phrase queries (probe-verified: § 107 → Harper & Row/Sony/Campbell).
-> Two-phase and HUMAN-GATED: phase 1 writes an ADD/UPDATE/KEEP/REMOVE review sheet, NO DB writes;
-> phase 2 applies only with Bing's approved sha. **BLOCKING GATE: Bing reviews the design, then
-> the phase-1 sheet.** Not started in code.
+> **CourtListener re-fetch IMPLEMENTED + phase-1 sheet READY FOR BING — 2026-08-21. BLOCKING
+> GATE: Bing reviews `CASES-REFETCH-REVIEW-2026-08-21.md` and, if approved, runs the apply
+> command printed on it (per DB, with the sheet's APPROVAL SHA). Live DBs UNCHANGED (77/89 ·
+> 59/68) — nothing applies without that sha.** Design `CASES-REFETCH-DESIGN-2026-08-21.md`
+> rev. 2 (senior-dev-agent reviewed), implementation double-checked by a 29-agent workflow
+> (23 confirmed findings all fixed — headline: the model screen now also judges existing
+> below-cap links from their stored excerpts, the only path that can ever reach Gambill-class
+> noise; model drops + high_signal_drop flags render ON the sheet; unverifiable links go to
+> MANUAL, never auto-REMOVE; retrieved_at = fetch time; apply self-validates on a clone and
+> refuses if a second run isn't a no-op). `src/store/ingest_cases.py` = plan/apply (old
+> score-ordered 5-cap fetch RETIRED); migration `011` (case_treatment.cite_count) applied to
+> BOTH DBs; reader rail orders by cite_count (landmarks first; date fallback pre-011); rail
+> excerpts labeled EXCERPT; court_level vocab → scotus|circuit|district|other. **Sheet
+> contents:** corpus.db ADD 224 cases / 316 links (citeCount-ranked canon: Feist, Campbell,
+> Harper & Row, Sony, Lexmark…), UPDATE 7, KEEP-below-cap 82, REMOVE 0 (screen not_run without
+> ANTHROPIC_API_KEY → relevance removals blocked; Gambill stays, disclosed — re-run plan with
+> the key to screen). **Full apply dry-run PROVEN on a throwaway corpus.db copy:** clone
+> validation + idempotency no-op + invariant byte-identical + §107 rail leads Harper & Row/
+> Sony/Campbell + "fair use" search → 11 cases. pytest **16/16**.
 >
 > **Reviewer note (2026-08-21):** the matrix's 36 cells remain DRAFT and must be verified by an
 > ATTORNEY (Julie), not by Bing — Bing develops the tool but has no IP-law background and cannot judge

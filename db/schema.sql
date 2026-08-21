@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS instruments (
   authority         TEXT,                  -- 'binding' (force of law) | 'persuasive' | 'precedent' (caselaw)
   positive_law      INTEGER,               -- 1 = enacted into positive law (Code = legal evidence) | 0 = prima facie | NULL = n/a
   source_edition    TEXT,                  -- 'official' | 'finding_aid' (eCFR/OLRC-online) | 'consolidated' | 'translation' | 'original_act'
-  court_level       TEXT,                  -- caselaw only: 'scotus' | 'circuit' | 'district' | 'foreign' (compute binding reach)
+  court_level       TEXT,                  -- caselaw only: 'scotus' | 'circuit' | 'district' | 'other' (state/CFC/bankruptcy; compute binding reach)
   first_seen_at     TEXT NOT NULL,
   last_updated_at   TEXT NOT NULL,
   UNIQUE (jurisdiction, ext_id_scheme, ext_id)
