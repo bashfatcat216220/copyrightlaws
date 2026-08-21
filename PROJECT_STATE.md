@@ -81,6 +81,16 @@ _Last updated: 2026-08-21._
 > stored excerpts (~600 chars each) — deeper reach rides the deferred, gated CourtListener
 > re-fetch (issue-1 banner), not more scraping here.
 >
+> **CourtListener re-fetch DESIGNED (not implemented) — `CASES-REFETCH-DESIGN-2026-08-21.md`,
+> rev. 2 after a senior-developer agent review (4 blocking findings folded in: opinion-identity
+> matching so case URLs never break; below-cap links are KEPT not removed; approval = operator-
+> pasted `--approved-sha`; declarative per-DB apply).** Fixes the four deferred case-coverage
+> defects (relevance noise, missing reporter cites, court_level 0/77, the 5-per-section cap) via
+> citeCount-ranked exact-phrase queries (probe-verified: § 107 → Harper & Row/Sony/Campbell).
+> Two-phase and HUMAN-GATED: phase 1 writes an ADD/UPDATE/KEEP/REMOVE review sheet, NO DB writes;
+> phase 2 applies only with Bing's approved sha. **BLOCKING GATE: Bing reviews the design, then
+> the phase-1 sheet.** Not started in code.
+>
 > **Reviewer note (2026-08-21):** the matrix's 36 cells remain DRAFT and must be verified by an
 > ATTORNEY (Julie), not by Bing — Bing develops the tool but has no IP-law background and cannot judge
 > legal correctness. Do not promote matrix cells to authority via `verify.py` without a lawyer's review.
