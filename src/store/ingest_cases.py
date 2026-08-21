@@ -67,6 +67,14 @@ from pathlib import Path
 CL = "https://www.courtlistener.com"
 UA = "copyright-corpus/1.0 (finding aid; contact via repo)"
 REPO = Path(__file__).resolve().parent.parent.parent
+
+# keys live in the gitignored repo-root .env (ANTHROPIC_API_KEY unlocks the relevance
+# screen; COURTLISTENER_API_TOKEN raises the fetch rate limit) — loaded here because
+# nothing else does; real environment variables always win over .env values
+sys.path.insert(0, str(REPO / "src"))
+from env import load_env  # noqa: E402
+
+load_env()
 API_PAGE_SIZE = 20                      # v4 search page size; --per beyond this would need paging
 
 # Most-litigated 17 U.S.C. sections — unchanged curation (widening is a separate decision).

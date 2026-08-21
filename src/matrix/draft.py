@@ -11,6 +11,13 @@ This is the UNATTENDED path (a future cron/batch once a key is in .env). The cur
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from env import load_env  # noqa: E402  (the docstring promises .env support — honor it)
+
+load_env()
 
 MODEL = "claude-opus-4-8"
 
