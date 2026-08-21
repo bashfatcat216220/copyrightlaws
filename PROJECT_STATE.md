@@ -309,8 +309,8 @@ and the push). Source of detail: `AUDIT-FINDINGS-2026-08-16.md`._
 > **CANONICAL CURRENT COUNTS (2026-08-21, read this first — older snapshots below are historical):**
 > **32 law instruments + 77 US cases · 14,387 provisions · 6,776 versions · 91 alerts · 18
 > jurisdictions · 36 matrix cells (all DRAFT, awaiting attorney verification) · pytest 10/10.**
-> Local `main` is ahead of origin by the platform-review work (issues 1–4, punch list complete;
-> 1–3 + 4 are in the working tree, UNCOMMITTED) + the earlier waves — **NOT pushed.**
+> Local `main` is ahead of origin by the platform-review work (issues 1–4, punch list complete,
+> committed as `4bf184e`) + the earlier waves — **NOT pushed.**
 
 > **Full 18-jurisdiction validity audit (6 fable agents, 2026-08-14) → `AUDIT-FINDINGS-2026-08-14.md`
 > — REMEDIATION COMPLETE (waves 1–6, all pushed).** Wave 1: 100 fabricated treaty pinpoints purged +
