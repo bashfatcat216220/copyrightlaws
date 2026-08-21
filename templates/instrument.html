@@ -32,8 +32,13 @@
       {% elif cases %}
         {% for c in cases %}
           <div class="caserow">
-            <div class="ch"><span class="cname">{{ c.name }}</span>{% if c.year %}<span class="cyr">{{ c.year }}</span>{% endif %}</div>
-            {% if c.cite %}<div class="ccite">{{ c.cite }}</div>{% endif %}
+            <div class="ch">
+              {% if c.case_id %}<a class="cname" href="/instrument/{{ c.case_id }}">{{ c.name }}</a>
+              {% else %}<span class="cname">{{ c.name }}</span>{% endif %}
+              {% if c.year %}<span class="cyr">{{ c.year }}</span>{% endif %}
+            </div>
+            {% if c.cite and c.cite_reporter %}<div class="ccite">{{ c.cite }}</div>
+            {% elif c.cite %}<div class="ccite" style="opacity:.55;">{{ c.cite }}</div>{% endif %}
             <div class="ctreat treat-{{ c.treatment }}">
               <span class="tlbl">{{ c.treatment }}</span>
               {% if c.holding %}<span class="chold">{{ c.holding }}</span>{% endif %}
@@ -173,6 +178,54 @@
   </section>
 
   {{ practice_panel(tab, cases, amendments, sel.slug, inst.id) }}
+</div>
+
+{% elif view == 'case' %}
+{# ── Case view — reverse-citation finding aid; opinion text lives at the source, not here ── #}
+<div class="reader-wrap">
+  <section class="reading">
+    <div class="measure">
+      <div class="rhead">
+        <div>
+          {% if inst.official_citation | reporter_cite %}<div class="cite">{{ inst.official_citation }}</div>{% endif %}
+          <h1>{{ inst.title }}</h1>
+          <div class="kick" style="margin-top:8px;">
+            {{ 'Precedent' if inst.authority == 'precedent' else 'Case' }}
+            {%- if inst.court_level %} · {{ inst.court_level | upper }}{% endif %}
+            {%- if inst.official_citation and not (inst.official_citation | reporter_cite) %} · {{ inst.official_citation }}
+            {%- elif inst.enacted_date %} · {{ inst.enacted_date }}{% endif %}
+            {%- if inst.jurisdiction %} · {{ inst.jurisdiction }}{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="flag warn" style="margin:0 0 18px;">Finding aid — a pointer to the provisions this
+        opinion is recorded as citing, not a report of the case or its holding. Read the full opinion
+        at the source and confirm before relying on it.</div>
+
+      {% if cp.cites %}
+        <div class="secgrid-head" style="border:0; padding:0 0 6px;">
+          <div><div class="kick">Recorded as citing</div></div>
+          <div class="rt">{{ cp.cites | length }} PROVISION{{ '' if cp.cites | length == 1 else 'S' }}</div>
+        </div>
+        <div class="secgrid" style="--numw: 16ch;">
+          {% for c in cp.cites %}
+            <a class="secitem titlerow" href="{% if c.slug %}/instrument/{{ c.instrument_id }}/{{ c.slug }}{% else %}/instrument/{{ c.instrument_id }}{% endif %}">
+              <span class="st">{{ c.citation }}{% if c.heading %} — {{ c.heading }}{% endif %}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty" style="padding:12px 0;">No provisions recorded for this case yet.</p>
+      {% endif %}
+
+      {% if cp.source_url %}
+        <div class="prov" style="margin-top:24px;">
+          <a href="{{ cp.source_url }}" target="_blank" rel="noopener">Read the full opinion on CourtListener ↗</a>
+        </div>
+      {% endif %}
+    </div>
+  </section>
 </div>
 
 {% else %}

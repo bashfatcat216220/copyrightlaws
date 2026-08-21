@@ -1,7 +1,7 @@
 -- Jurisdiction scope (reference vocabulary, not law content). Tiered per the roadmap.
 -- Tier 1: full text, versioned, monitored. Tier 2: text + amendment alerts. Tier 3: metadata/link.
 INSERT OR IGNORE INTO jurisdictions (code, name, tier, notes) VALUES
-  ('US','United States',1,'17 U.S.C. + 37 C.F.R. + Copyright Office Compendium'),
+  ('US','United States',1,'17 U.S.C. (Title 17) + 37 C.F.R. (Copyright Office regulations)'),
   ('GB','United Kingdom',1,'CDPA 1988 — legislation.gov.uk (point-in-time + change feed)'),
   ('EU','European Union',1,'InfoSoc/DSM/Software/Database/Term/Enforcement — EUR-Lex (consolidated NOT authentic)'),
   ('INT','International treaties',1,'Berne, TRIPS, WCT, WPPT, Rome, Beijing, Marrakesh — hand-loaded'),

@@ -5,25 +5,67 @@
 <div class="page">
   <div class="kicker">Comparative matrix</div>
   <h1 class="title">Attributes across jurisdictions</h1>
-  <p class="lead">Term, moral rights, TDM/AI-training exception, fair use, safe harbour, and more —
-    drafted from the cited source text, shown as authority only when a person has verified it.</p>
+  <p class="lead">Term, moral rights, TDM/AI-training exception, fair use, safe harbour — each cell is
+    drafted from the cited source provision and shown as authority only once a person has verified it.</p>
 
-  {% if not cells %}
-    <p class="empty">The matrix is empty. Cells are populated in Phase 4 — each is model-drafted
-      from a cited source version, then human-verified before it appears here as authority.</p>
+  {% if not attrs %}
+    <p class="empty">The matrix is empty. Draft the seed with <code>load_cells.py</code>, then sign
+      cells off with <code>verify.py</code>.</p>
   {% else %}
-    <table>
-      <tr><th>Attribute</th><th>Jurisdiction</th><th>Value</th><th>Status</th></tr>
-      {% for c in cells %}
-        <tr>
-          <td class="mono">{{ c.attribute }}</td>
-          <td class="mono">{{ c.jurisdiction }}</td>
-          <td>{{ c.value or '—' }}</td>
-          <td>{% if c.verified_by %}<span class="flag strong">Verified</span>
-              {% else %}<span class="flag">Draft</span>{% endif %}</td>
-        </tr>
-      {% endfor %}
-    </table>
+    <div class="mx-legend">
+      <span class="flag strong">Verified</span> human-signed-off ·
+      <span class="flag">Draft</span> model-drafted, not yet authority ·
+      <span class="mx-dash">—</span> not in this corpus
+      <span class="mx-count">{{ n_cells }} cells · {{ n_verified }} verified · {{ n_cells - n_verified }} draft</span>
+    </div>
+    <div class="mx-wrap">
+      <table class="mx">
+        <thead>
+          <tr><th class="mx-attr">Attribute</th>{% for j in jurs %}<th>{{ j }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+          {% for a in attrs %}
+            <tr>
+              <th class="mx-attr">{{ a.label }}</th>
+              {% for j in jurs %}
+                {% set c = grid[a.key].get(j) %}
+                <td class="{{ 'mx-verified' if c and c.verified_by else ('mx-draft' if c else 'mx-empty') }}">
+                  {% if c %}
+                    <div class="mx-val">{{ c.value }}</div>
+                    <div class="mx-meta">
+                      {% if c.verified_by %}<span class="flag strong">Verified</span>
+                      {% else %}<span class="flag">Draft</span>{% endif %}
+                      {% if c.link %}<a class="mx-src" href="{{ c.link }}">{{ c.source_citation }}</a>
+                      {% elif c.source_citation %}<span class="mx-src muted">{{ c.source_citation }}</span>
+                      {% else %}<span class="mx-src muted">unsourced</span>{% endif %}
+                    </div>
+                  {% else %}<span class="mx-dash">—</span>{% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="empty" style="margin-top:14px; font-size:11px;">Drafts are model-generated from the cited
+      provision and are NOT authority until verified. Confirm every cell against its linked source.</p>
   {% endif %}
 </div>
+<style>
+  .mx-legend{font-size:11px;color:#555;margin:8px 0 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .mx-legend .mx-count{margin-left:auto;color:#888}
+  .mx-dash{color:#bbb}
+  .mx-wrap{overflow-x:auto;border:1px solid #e5e2db}
+  table.mx{border-collapse:collapse;width:100%;font-size:12px;background:#fff}
+  table.mx th,table.mx td{border:1px solid #e5e2db;vertical-align:top;padding:9px 11px;text-align:left}
+  table.mx thead th{background:#f6f4ef;font:600 11px/1.1 monospace;letter-spacing:.04em;text-transform:uppercase;color:#444}
+  table.mx th.mx-attr{background:#f6f4ef;font-weight:600;min-width:190px;position:sticky;left:0;z-index:1}
+  table.mx td{min-width:205px}
+  .mx-val{line-height:1.4}
+  .mx-meta{margin-top:7px;display:flex;gap:8px;align-items:baseline}
+  .mx-src{font:600 10.5px monospace;color:#2a5db0;text-decoration:none;white-space:nowrap}
+  .mx-src.muted{color:#aaa}
+  td.mx-verified{background:#fbfdfa}
+  td.mx-empty{text-align:center}
+</style>
 {% endblock %}

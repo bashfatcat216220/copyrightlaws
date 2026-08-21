@@ -10,7 +10,7 @@
     <button type="submit">Search</button>
   </form>
 
-  {% if q and not results %}
+  {% if q and not results and not case_results %}
     <p class="empty">No matches for "{{ q }}" — the corpus may not be populated yet.</p>
   {% elif results %}
     <div class="headrule"><div class="rt">{{ results|length }} RESULT{{ '' if results|length == 1 else 'S' }}</div></div>
@@ -26,5 +26,22 @@
       </div>
     </div>
   {% endfor %}
+
+  {% if case_results %}
+    <div class="headrule" style="margin-top:30px;"><div class="rt">CASE LAW · {{ case_results|length }}</div></div>
+    <p class="lead" style="font-size:12.5px;">Matches the case name, citation, or the recorded
+      CourtListener excerpt — not the full opinion text. Each case page links the provisions it is
+      recorded as citing and out to the full opinion at the source.</p>
+    {% for r in case_results %}
+      <div class="lrow">
+        <div class="cite">{% if r.official_citation and r.official_citation | reporter_cite %}{{ r.official_citation }}{% else %}{{ r.jurisdiction }}{% endif %}</div>
+        <div>
+          <div class="h"><a href="/instrument/{{ r.case_id }}">{{ r.title }}</a></div>
+          <div class="m">Recorded as citing {{ r.cites }}</div>
+          {% if r.snip %}<div class="lawtext" style="font-size:13.5px; line-height:1.6; margin:6px 0 0;">{{ r.snip }}</div>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% endif %}
 </div>
 {% endblock %}

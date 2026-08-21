@@ -2,7 +2,88 @@
 
 > Status comes from THIS file, read fresh. Do not answer "where are we" from memory.
 
-_Last updated: 2026-08-19._
+_Last updated: 2026-08-21._
+
+> **Platform review (practitioner's lens) — 2026-08-21 → `PLATFORM-REVIEW-2026-08-21.md`.**
+> Click-through of the running app judging PLATFORM quality (organization, usability, depth,
+> work-product credibility), NOT law validity. **Verdict: good work product at the statute/treaty
+> layer; content depth thin on the three things a litigator reaches for first.** Punch list, ranked:
+> (1) **[HIGH]** case law is the weakest link — standalone case pages are empty shells (`/instrument/36`
+> = "no stored version"), duplicate case rows (same opinion, multiple CL clusters), an "In Force"
+> mislabel, and linkage capped at ~5/section AND noisy (false positive: an Ohio mandamus case linked
+> to § 107). (`treatment='cited'`/raw-`holding` is a documented honesty choice the UI discloses, not a
+> defect; the earlier "stray 1768" report was a low-res misread of pixelated citation text.)
+> (2) **[HIGH]** `/matrix` is an empty top-nav stub ("populated in Phase 4"); (3) **[MED]** cases +
+> the Compendium are invisible from browse (US page shows 2 instruments, hides the cases); (4) **[MED]**
+> full-text search can't reach case opinion text.
+>
+> **Issue 1 — display fixes + safe dedup SHIPPED, 2026-08-21 (local `main`, not pushed).** Standalone
+> case pages are now a real, reachable **reverse-citation finding aid** (`view='case'` + `_case_page`
+> in `src/app.py`; new template block): case metadata + the provisions it's recorded as citing
+> (deep-linked back into the reader) + a link out to the full opinion — no opinion text re-hosted
+> (prime rule 2). The reader rail's case names now link to those pages; court+year fallbacks no longer
+> render in the citation slot (`_reporter_cite` heuristic); the "In Force" mislabel is gone. Migration
+> `009_dedupe_cases.py` merged duplicate case rows on **BOTH DBs** (corpus.db 81→77 cases · 93→89
+> case_treatment; corpus-demo 62→59) — merge key = real reporter cite alone, else (title, cite);
+> validated on a backup clone first (rule 9), provisions/versions/alerts invariant, 0 orphaned links,
+> FK + integrity clean, idempotent; **pytest 6/6**. **Deferred (gated CourtListener re-fetch):**
+> relevance filter (cut false positives), real reporter citations + `court_level`, the 5-per-section
+> cap, and the 22-section curation — the case-*coverage* work. (Issues 3–4 shipped later the
+> same day — banners below.)
+>
+> **Issue 2 — comparative matrix POPULATED (grounded + human-gated), 2026-08-21 (local `main`, not
+> pushed).** `/matrix` was an empty Phase-4 stub; now it's a real comparison grid. A vertical-slice
+> seed — 6 jurisdictions (US/GB/EU/CA/AU/DE) × 6 attributes (individual term, corporate/for-hire term,
+> open fair use vs. closed list, commercial TDM/AI, moral-rights waivability, intermediary safe
+> harbour) = **36 cells** — was drafted by claude-opus-4-8 STRICTLY from the cited corpus provisions
+> (`src/matrix/seed_cells.py`) and loaded as **Drafts** via `src/matrix/load_cells.py` (resolves each
+> to its `source_version`; refuses any unresolved citation; one documented gap = DE platform liability
+> in UrhDaG, not in corpus → unsourced). New: `src/matrix/verify.py` (the human sign-off gate — the
+> `matrix_verified_needs_source` trigger blocks verifying a source-less cell, tested) and
+> `src/matrix/draft.py` (the claude-opus-4-8 API draft path, offline-safe without a key). `/matrix`
+> route + `templates/matrix.html` rewritten to a grid (attributes × jurisdictions) with Draft/Verified
+> markers + source deep-links. Loaded to **BOTH DBs** (36 cells · 1 gap · 0 verified each); validated on
+> a backup clone; **pytest 8/8** (+2 matrix-gate tests). **BLOCKING GATE:** all 36 cells are DRAFT —
+> Bing reviews `verify.py --list` and runs `verify.py --by "…"` to promote the ones he approves; nothing
+> is shown as authority until then. **Deferred:** remaining 9 attributes + 12 jurisdictions; unattended
+> API draft batch once `ANTHROPIC_API_KEY` is in `.env`.
+>
+> **Issue 3 — case law surfaced in browse + Compendium honesty fix SHIPPED, 2026-08-21 (local `main`,
+> not pushed).** The 77 US cases were invisible from browse (`WHERE type != 'case'` everywhere); now
+> `/jurisdiction/US` has a **"Case law · 77"** section (alphabetical, each linking to its case page
+> from issue 1, reporter cite or year), the home US card reads "2 INSTRUMENTS · 77 CASES" (`_rail`
+> gained a `cases` count), and the false "Copyright Office Compendium" subtitle → "17 U.S.C. (Title 17)
+> + 37 C.F.R. (Copyright Office regulations)" in `db/seed_jurisdictions.sql` + both live DBs (backed up
+> first). The **"instruments" denominator stays law-only (32)** — cases counted separately, never
+> folded in. `src/app.py` (`_rail`, `/jurisdiction` route) + `templates/jurisdiction.html` +
+> `templates/index.html`. No-case jurisdictions unchanged; **pytest 8/8**. **Deferred:** global
+> `/cases` index; loading the Compendium. (Issue 4 shipped next — banner below.)
+>
+> **Issue 4 — case law reachable from full-text search SHIPPED, 2026-08-21 (local `main`, not
+> pushed) — the platform-review punch list is now COMPLETE.** Cases carry no `versions` rows (we
+> never re-host opinion text — prime rule 2), so nothing about them could ride `versions_fts`.
+> New **`case_fts`** FTS5 table (title, citation, holding; rowid = `case_treatment.id`) indexes
+> exactly what the corpus RECORDS per citing link: the case name, its citation, and the
+> CourtListener excerpt in `case_treatment.holding` — the honest searchable surface, labeled as
+> such in the UI ("matches the recorded excerpt, not the full opinion"). Migration
+> `010_case_fts.py` (ADDITIVE, FTS-only — instruments/provisions/versions/case_treatment/alerts
+> byte-identical; idempotent; validated on a sqlite-backup clone first, rule 9) applied to **BOTH
+> DBs** (corpus.db 89 rows · corpus-demo 68); kept durable by `ingest_cases.sync_case_fts` (the
+> migration imports the SAME function, so the paths can't drift — future case ingests re-sync).
+> `/search` now renders a **"CASE LAW · N"** section under the statute results: deduped per
+> opinion (best FTS rank), reporter cite in the citation slot only when real (`reporter_cite`
+> heuristic, else jurisdiction), a "Recorded as citing 17 U.S.C. § X" line, snippet, and a
+> deep-link to the issue-1 case page. Statute results untouched; the route is guarded on
+> `case_fts` existing so a fresh/schema-only DB still searches. Verified live on :8021 —
+> "fair use" → 3 cases (OLC 1999 + both American Geophysical cites), "texaco" → 2, statute-only
+> queries ("moral rights") show no case section, empty state intact. **pytest 10/10** (+2:
+> holding-excerpt reach via `case_fts`; empty-DB sync). Search reach is still bounded by the
+> stored excerpts (~600 chars each) — deeper reach rides the deferred, gated CourtListener
+> re-fetch (issue-1 banner), not more scraping here.
+>
+> **Reviewer note (2026-08-21):** the matrix's 36 cells remain DRAFT and must be verified by an
+> ATTORNEY (Julie), not by Bing — Bing develops the tool but has no IP-law background and cannot judge
+> legal correctness. Do not promote matrix cells to authority via `verify.py` without a lawyer's review.
 
 > **Uniform instrument landing page — every flat treaty/directive now rails like the chaptered ones, 2026-08-19.**
 > Bing's ask: make the reader's left sidebar uniform across all subpages (the chaptered CDPA landing —
@@ -225,6 +306,12 @@ and the push). Source of detail: `AUDIT-FINDINGS-2026-08-16.md`._
 
 ## Where we are (one breath)
 
+> **CANONICAL CURRENT COUNTS (2026-08-21, read this first — older snapshots below are historical):**
+> **32 law instruments + 77 US cases · 14,387 provisions · 6,776 versions · 91 alerts · 18
+> jurisdictions · 36 matrix cells (all DRAFT, awaiting attorney verification) · pytest 10/10.**
+> Local `main` is ahead of origin by the platform-review work (issues 1–4, punch list complete;
+> 1–3 + 4 are in the working tree, UNCOMMITTED) + the earlier waves — **NOT pushed.**
+
 > **Full 18-jurisdiction validity audit (6 fable agents, 2026-08-14) → `AUDIT-FINDINGS-2026-08-14.md`
 > — REMEDIATION COMPLETE (waves 1–6, all pushed).** Wave 1: 100 fabricated treaty pinpoints purged +
 > sequential-numbering parser fix. Wave 2: CDPA repeal notices + cross-cutting `status='repealed'` (87
@@ -234,11 +321,11 @@ and the push). Source of detail: `AUDIT-FINDINGS-2026-08-16.md`._
 > Statements + TRIPS Annex, CDPA Schedule 5A (surgical — alerts still 91), MX transitional. Wave 6:
 > CN citations, KR `¡?`, eCFR ranges, FR/ES source-vintage UI flags. Final regression: 0 fabricated
 > pinpoints, 0 junk, 0 blank bodies, 0 duplicate citations; pytest 6/6. Ingest-correctness rules are
-> codified in `CLAUDE.md` ("Ingest correctness rules"). Corpus now **32 instruments · ~14,099 provisions
-> · ~6,333 versions**.
+> codified in `CLAUDE.md` ("Ingest correctness rules"). Corpus at that sweep (2026-08-14) was
+> **32 instruments · ~14,099 provisions · ~6,333 versions** (current counts in the canonical line above).
 
 **Phase 0 done · jurisdiction breadth done · Tier-1 completions done.** **32 instruments ·
-14,088 provisions · 5,325 versions** across 18 jurisdictions. US = 17 U.S.C. + 37 C.F.R.;
+14,387 provisions · 6,776 versions** across 18 jurisdictions (+ 77 US cases surfaced in browse). US = 17 U.S.C. + 37 C.F.R.;
 EU = 8 copyright directives (InfoSoc + DSM/Software/Database/Term/Rental/Orphan/Enforcement);
 INT = 7 treaties (Berne + WCT/WPPT/Rome/Beijing/Marrakesh/TRIPS); + all 14 Tier-2 countries
 (see the corpus table). The KM IP — Statute Browser design is live over the section-level
@@ -254,9 +341,9 @@ substantively grounded (verbatim text, provenance-stamped) and the 3 concrete de
 are **fixed** (see "Audit & remediation"). Next depth items: per-subsection text, deep-linkable
 URLs, matrix (see "Remaining work"). corpus.db migrated + loaded; branch pushed.
 
-- **Corpus (live in `corpus.db`):** **18 instruments · 12,857 provisions · 4,516 versions**,
-  every version SHA-256'd with `source_url` + `retrieved_at`. **Phase 2 breadth: Tier-1 (4) +
-  all 14 Tier-2 countries DONE.**
+- **Corpus (live in `corpus.db`):** **32 instruments · 14,387 provisions · 6,776 versions**
+  (historical snapshot below the table was 18/12,857/4,516 pre-breadth), every version SHA-256'd
+  with `source_url` + `retrieved_at`. **Phase 2 breadth: Tier-1 (4) + all 14 Tier-2 countries DONE.**
   | Jur | Instrument | Source | Provisions | Lang |
   |---|---|---|---|---|
   | US | 17 U.S.C. | USLM XML | 153 sections (4 deep) | official |

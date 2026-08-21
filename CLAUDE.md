@@ -85,9 +85,16 @@ sha256, versions, and syncs FTS.
   (37 C.F.R. + the rest of the EU directives + the core treaties) DONE → 32 instruments.
 - **Depth layers — IN PROGRESS.** DONE: change monitoring (hash-diff → redline → `/alerts`
   digest + daily `src/monitor/refresh.py` cron, UK+US) · real Cases data (`case_treatment`,
-  CourtListener opinions citing a section). TODO: per-subsection text; deep-linkable provision
-  URLs (`/instrument/{id}/{citation}`); the comparative matrix (human-gated). Live status +
-  the ordered backlog live in `PROJECT_STATE.md` — read it fresh.
+  CourtListener opinions citing a section) · deep-linkable provision URLs
+  (`/instrument/{id}/{citation}`) · **case pages** (reverse-citation finding aid, `view='case'`) +
+  cases surfaced in browse (`/jurisdiction/US` "Case law" section) · **comparative matrix — first
+  slice shipped** (6 jurisdictions × 6 attributes, `src/matrix/`; drafted by claude-opus-4-8 from
+  cited provisions, loaded as DRAFT, human-gated — a cell is authority only when an ATTORNEY verifies
+  it, prime rule 4) · **case-law full-text search** (`case_fts` over the recorded case name/citation/
+  CourtListener excerpt — cases have no versions rows, opinion text never re-hosted; synced by
+  `ingest_cases.sync_case_fts`, backfilled by migration 010). TODO: per-subsection text; matrix
+  breadth (remaining attributes/jurisdictions) + attorney verification of the drafted slice. Live
+  status + the ordered backlog live in `PROJECT_STATE.md` — read it fresh.
 - **Validity audits (recurring).** Read-only `fable` agents check stored law against the SOURCE
   ARTIFACT (not just the DB) per jurisdiction. The full 18-jurisdiction sweep (2026-08-14) is in
   `AUDIT-FINDINGS-2026-08-14.md` with per-finding fix status; live status in `PROJECT_STATE.md`.
@@ -173,7 +180,15 @@ Learned from the 2026-08-14 audit; these are prime-rule-1 (no fake law) corollar
   `db/migrations/001_provisions_rebuild.sql` (already applied to `corpus.db`).
 - Web:  `uvicorn src.app:app` (we run `--port 8021`) -> the reader/search over the live corpus.
 - Ingest a source: `python src/store/ingest_<x>.py --db db/corpus.db --allow-corpus --html/--xml <artifact> --source-url <url>`. `store/_common.py` = shared writer (idempotent BY CONTENT — re-fetch of unchanged text adds no version).
-- Change monitor: `python src/monitor/monitor.py --db db/corpus.db [--instrument N]` (diffs version history → `alerts`); `src/monitor/refresh.py` = fetch → re-ingest → monitor (cron). Matrix still a stub.
+- Change monitor: `python src/monitor/monitor.py --db db/corpus.db [--instrument N]` (diffs version history → `alerts`); `src/monitor/refresh.py` = fetch → re-ingest → monitor (cron).
+- Matrix (`/matrix`, human-gated per prime rule 4): draft → load → verify. The seed is drafted by
+  claude-opus-4-8 STRICTLY from cited corpus provisions (`src/matrix/seed_cells.py` = the reviewable
+  artifact; `src/matrix/draft.py` = the offline-safe API path for unattended batches). Load as Drafts:
+  `python src/matrix/load_cells.py --db db/corpus.db --allow-corpus` (resolves ext_id+citation →
+  `source_version`; refuses unresolved citations; idempotent; never clobbers a verified cell).
+  Human sign-off gate: `python src/matrix/verify.py --db db/corpus.db --list` then `--by "<name>"
+  [--all | --jurisdiction X --attribute Y]` — the `matrix_verified_needs_source` trigger blocks
+  verifying a source-less cell. A cell is shown as authority ONLY when `verified_by` is set.
 - corpus.db + corpus-demo.db + spike/ are gitignored (rebuildable from the ingests).
 
 ## Decisions pending

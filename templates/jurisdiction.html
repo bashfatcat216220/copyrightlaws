@@ -30,6 +30,23 @@
         </div>
       {% endfor %}
     {% endif %}
+
+    {% if cases %}
+      <div class="headrule" style="margin-top:30px;">
+        <h2 class="title" style="font-size:20px; margin-bottom:0;">Case law</h2>
+        <div class="rt">{{ cases|length }} CASE{{ '' if cases|length == 1 else 'S' }}</div>
+      </div>
+      <p class="lead" style="font-size:12.5px;">Opinions citing copyright provisions (CourtListener).
+        A finding aid — each links the provisions it is recorded as citing and out to the full
+        opinion; not a report of the holding.</p>
+      <div class="secgrid" style="--numw: 0ch;">
+        {% for c in cases %}
+          <a class="secitem titlerow" href="/instrument/{{ c.id }}">
+            <span class="st">{{ c.title }}{% if c.official_citation and c.official_citation | reporter_cite %} — {{ c.official_citation }}{% elif c.enacted_date %} — {{ c.enacted_date }}{% endif %}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
   {% endif %}
 </div>
 {% endblock %}

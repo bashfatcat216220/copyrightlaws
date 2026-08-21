@@ -48,6 +48,19 @@ def _smart_title(s):
 
 templates.env.filters["smart_title"] = _smart_title
 
+
+def _reporter_cite(cite) -> bool:
+    """True when `cite` looks like a real reporter/neutral citation ('369 F. Supp. 3d 1053',
+    '2013 Ohio 761') rather than the case ingest's court+year fallback ('Court of Appeals for the
+    First Circuit 1994', minted when CourtListener returned no reporter cite). Real cites lead with
+    a volume/year number; the fallback leads with the court name. Used to keep a non-citation out of
+    the citation slot (authoritative presentation). A proper cite + court_level backfill is the
+    deferred, gated CourtListener re-fetch."""
+    return bool(cite) and cite.strip()[:1].isdigit()
+
+
+templates.env.filters["reporter_cite"] = _reporter_cite
+
 app = FastAPI(title="Copyright Corpus")
 
 
@@ -61,11 +74,14 @@ def _conn() -> sqlite3.Connection:
 
 
 def _rail(conn: sqlite3.Connection) -> dict:
-    """Jurisdiction rail: tier -> [{code,name,n}] with live instrument counts."""
+    """Jurisdiction rail: tier -> [{code,name,n,cases}] with live counts. `n` = law instruments
+    (statutes/regs/treaties, never cases — keeps the corpus denominator honest); `cases` is the
+    separate count of case-law annotations, surfaced distinctly."""
     tiers: dict = {}
     for r in conn.execute(
         "SELECT j.tier, j.code, j.name, "
-        "  (SELECT COUNT(*) FROM instruments i WHERE i.jurisdiction=j.code AND i.type != 'case') AS n "
+        "  (SELECT COUNT(*) FROM instruments i WHERE i.jurisdiction=j.code AND i.type != 'case') AS n, "
+        "  (SELECT COUNT(*) FROM instruments i WHERE i.jurisdiction=j.code AND i.type =  'case') AS cases "
         "FROM jurisdictions j ORDER BY j.tier, j.name"):
         tiers.setdefault(r["tier"], []).append(dict(r))
     return tiers
@@ -110,7 +126,7 @@ def index(request: Request):
 @app.get("/search", response_class=HTMLResponse)
 def search(request: Request, q: str = ""):
     conn = _conn()
-    results = []
+    results, case_results = [], []
     if q.strip():
         toks = " ".join(t for t in "".join(c if c.isalnum() else " " for c in q).split())
         if toks:
@@ -120,8 +136,29 @@ def search(request: Request, q: str = ""):
                 "FROM versions_fts f JOIN versions v ON v.id=f.rowid "
                 "JOIN instruments i ON i.id=v.instrument_id "
                 "WHERE versions_fts MATCH ? ORDER BY rank LIMIT 50", (toks,)).fetchall()]
+            # Case law (issue 4): searchable via what the corpus RECORDS — case name, citation,
+            # and the CourtListener excerpt (case_treatment.holding). We never re-host opinion
+            # text, so this is the honest full-text surface; the template labels it as the
+            # recorded excerpt. Guarded: case_fts exists only once migration 010 / a case
+            # ingest has run (fresh or test DBs may lack it).
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name='case_fts'").fetchone():
+                seen = set()
+                for r in conn.execute(
+                        "SELECT ct.case_instrument AS case_id, i.title, i.official_citation, "
+                        "  i.jurisdiction, p.citation AS cites, "
+                        "  snippet(case_fts, 2, '[', ']', '…', 12) AS snip "
+                        "FROM case_fts f JOIN case_treatment ct ON ct.id=f.rowid "
+                        "JOIN instruments i ON i.id=ct.case_instrument "
+                        "JOIN provisions p ON p.id=ct.provision_id "
+                        "WHERE case_fts MATCH ? ORDER BY rank LIMIT 40", (toks,)):
+                    if r["case_id"] in seen:      # same opinion recorded against several sections
+                        continue
+                    seen.add(r["case_id"])
+                    case_results.append(dict(r))
+                case_results = case_results[:20]
     return templates.TemplateResponse(request, "search.html",
-                                      _ctx(conn, active_nav="search", q=q, results=results))
+                                      _ctx(conn, active_nav="search", q=q, results=results,
+                                           case_results=case_results))
 
 
 @app.get("/jurisdiction/{code}", response_class=HTMLResponse)
@@ -131,8 +168,13 @@ def jurisdiction(request: Request, code: str):
     insts = [dict(r) for r in conn.execute(
         "SELECT id, title, official_citation, type, status FROM instruments "
         "WHERE jurisdiction=? AND type != 'case' ORDER BY type, title", (code,))]
+    # Case law is surfaced as its own section (issue 3) — reachable case pages built in issue 1.
+    cases = [dict(r) for r in conn.execute(
+        "SELECT id, title, official_citation, enacted_date, authority FROM instruments "
+        "WHERE jurisdiction=? AND type = 'case' ORDER BY title", (code,))]
     return templates.TemplateResponse(request, "jurisdiction.html",
-                                      _ctx(conn, active_jur=code, j=dict(j) if j else None, insts=insts))
+                                      _ctx(conn, active_jur=code, j=dict(j) if j else None,
+                                           insts=insts, cases=cases))
 
 
 # Source-vintage caveats (F-FR1 / F-ES4, Bing-approved 2026-08-14). These hand-loaded
@@ -236,6 +278,28 @@ def _chapter_slug_map(conn, iid):
     return cid2slug, slug2cid
 
 
+def _case_page(conn, iid):
+    """Reverse-citation finding-aid view for a type='case' instrument. We do NOT re-host the
+    opinion text (finding aid, prime rule 2): the page shows the statute provisions this opinion is
+    recorded — by CourtListener full-text — as citing, each deep-linked back into the reader, plus a
+    link out to the full opinion. Mirrors the forward rail query (`_section_reader` sel['cases']),
+    keyed on ct.case_instrument instead of ct.provision_id. Returns {cites, source_url}."""
+    rows = [dict(r) for r in conn.execute(
+        "SELECT ct.provision_id, ct.source_url, p.instrument_id, p.citation, p.heading, p.sort_int, "
+        "  i2.title AS inst_title, i2.official_citation AS inst_cite "
+        "FROM case_treatment ct JOIN provisions p ON p.id=ct.provision_id "
+        "JOIN instruments i2 ON i2.id=p.instrument_id "
+        "WHERE ct.case_instrument=? ORDER BY p.instrument_id, p.sort_int, ct.id", (iid,))]
+    slug_by_inst: dict = {}                                   # one _slug_map per cited instrument
+    for r in rows:
+        pi = r["instrument_id"]
+        if pi not in slug_by_inst:
+            slug_by_inst[pi] = _slug_map(conn, pi)[0]
+        r["slug"] = slug_by_inst[pi].get(r["provision_id"])
+    source_url = next((r["source_url"] for r in rows if r.get("source_url")), None)
+    return {"cites": rows, "source_url": source_url}
+
+
 def _section_reader(conn, iid, sec):
     """Provisions-aware view: chapter-grouped section rail + the selected section's text.
     Returns (rail, sel) or (None, None) if this instrument has no provisions loaded."""
@@ -326,10 +390,12 @@ def _section_reader(conn, iid, sec):
             "SELECT point_in_time, retrieved_at, is_current FROM versions "
             "WHERE provision_id=? ORDER BY retrieved_at DESC", (sel_id,))]
         sel["cases"] = [dict(r) for r in conn.execute(
-            "SELECT i.title AS name, i.official_citation AS cite, i.enacted_date AS year, "
-            "  ct.treatment, ct.holding, ct.source_url "
+            "SELECT i.id AS case_id, i.title AS name, i.official_citation AS cite, "
+            "  i.enacted_date AS year, ct.treatment, ct.holding, ct.source_url "
             "FROM case_treatment ct JOIN instruments i ON i.id=ct.case_instrument "
             "WHERE ct.provision_id=? ORDER BY i.enacted_date DESC, ct.id", (sel_id,))]
+        for c in sel["cases"]:                                # keep court+year fallbacks out of the cite slot
+            c["cite_reporter"] = _reporter_cite(c.get("cite"))
         # if this provision's current version is an alert's new_version, show the redline
         al = conn.execute(
             "SELECT a.summary, a.rule, ov.point_in_time AS old_pit "
@@ -680,6 +746,8 @@ def _render_instrument(request: Request, iid: int, tab: str,
                    cases=(sel.get("cases") if sel else []))
     elif inst and has_prov:                                # View 1 — chapter index
         ctx.update(view="index", ci=_chapter_index(conn, iid, chap))
+    elif inst and inst["type"] == "case":                  # case — reverse-citation finding aid
+        ctx.update(view="case", cp=_case_page(conn, iid))
     elif inst:                                             # whole-instrument fallback (no provisions)
         ver = conn.execute("SELECT * FROM versions WHERE instrument_id=? AND is_current=1 "
                            "ORDER BY point_in_time DESC LIMIT 1", (iid,)).fetchone()
@@ -715,11 +783,49 @@ def alerts(request: Request):
                                       _ctx(conn, active_nav="alerts", alerts=rows))
 
 
+# Human-readable row labels for the comparative matrix (attribute key -> display). Order here is the
+# row order in the grid; any attribute present but unlabelled falls back to its key, appended after.
+MATRIX_ATTR_LABELS = {
+    "term_individual": "Term — individual works",
+    "term_corporate": "Term — corporate / works made for hire",
+    "fair_use_vs_closed_list": "Exceptions — open fair use vs. closed list",
+    "tdm_commercial": "TDM / commercial AI-training exception",
+    "moral_rights_waivable": "Moral rights — waivable?",
+    "safe_harbor_regime": "Intermediary safe harbour",
+}
+MATRIX_JUR_ORDER = ["US", "GB", "EU", "CA", "AU", "DE"]
+
+
 @app.get("/matrix", response_class=HTMLResponse)
 def matrix(request: Request):
     conn = _conn()
-    cells = [dict(r) for r in conn.execute(
-        "SELECT jurisdiction, attribute, value, verified_by FROM matrix_cells "
-        "ORDER BY attribute, jurisdiction")]
+    rows = [dict(r) for r in conn.execute(
+        "SELECT mc.jurisdiction, mc.attribute, mc.value, mc.verified_by, mc.source_citation, "
+        "  v.provision_id, p.instrument_id "
+        "FROM matrix_cells mc "
+        "LEFT JOIN versions v ON v.id=mc.source_version "
+        "LEFT JOIN provisions p ON p.id=v.provision_id "
+        "ORDER BY mc.attribute, mc.jurisdiction")]
+    # deep-link slug per cited provision (cache one _slug_map per instrument)
+    slug_by_inst: dict = {}
+    grid: dict = {}
+    for r in rows:
+        iid, pid = r.get("instrument_id"), r.get("provision_id")
+        if iid and pid:
+            if iid not in slug_by_inst:
+                slug_by_inst[iid] = _slug_map(conn, iid)[0]
+            slug = slug_by_inst[iid].get(pid)
+            r["link"] = f"/instrument/{iid}/{slug}" if slug else f"/instrument/{iid}"
+        else:
+            r["link"] = None
+        grid.setdefault(r["attribute"], {})[r["jurisdiction"]] = r
+    # row order = labelled attributes first (present ones), then any extras; col order = preferred
+    present_attrs = list(grid.keys())
+    attrs = [{"key": k, "label": MATRIX_ATTR_LABELS[k]} for k in MATRIX_ATTR_LABELS if k in grid]
+    attrs += [{"key": k, "label": k} for k in present_attrs if k not in MATRIX_ATTR_LABELS]
+    jurs = [j for j in MATRIX_JUR_ORDER if any(j in grid[a] for a in grid)]
+    jurs += sorted({j for a in grid for j in grid[a]} - set(jurs))
+    n_verified = sum(1 for r in rows if r["verified_by"])
     return templates.TemplateResponse(request, "matrix.html",
-                                      _ctx(conn, active_nav="matrix", cells=cells))
+                                      _ctx(conn, active_nav="matrix", grid=grid, attrs=attrs,
+                                           jurs=jurs, n_cells=len(rows), n_verified=n_verified))

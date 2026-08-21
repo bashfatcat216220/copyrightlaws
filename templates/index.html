@@ -23,7 +23,7 @@
       {% for j in rows %}
         {% if j.n %}
           <a class="jcard" href="/jurisdiction/{{ j.code }}">
-            <span class="jc">{{ j.code }}</span><span class="jn">{{ j.name }}</span><span class="jk">{{ j.n }} INSTRUMENT{{ '' if j.n == 1 else 'S' }}</span>
+            <span class="jc">{{ j.code }}</span><span class="jn">{{ j.name }}</span><span class="jk">{{ j.n }} INSTRUMENT{{ '' if j.n == 1 else 'S' }}{% if j.cases %} · {{ j.cases }} CASE{{ '' if j.cases == 1 else 'S' }}{% endif %}</span>
           </a>
         {% else %}
           <div class="jcard" style="opacity:.45;">

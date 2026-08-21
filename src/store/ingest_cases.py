@@ -67,6 +67,28 @@ def _search(section: str, per: int) -> list[dict]:
     return out
 
 
+# Case full-text search (platform-review issue 4). Cases carry no `versions` rows (we never
+# re-host opinion text — finding aid, prime rule 2), so they can't ride versions_fts. Instead
+# a dedicated FTS table indexes exactly what the corpus RECORDS about each citing link: the
+# case name, its citation, and the CourtListener excerpt stored in case_treatment.holding.
+# rowid = case_treatment.id, so a hit resolves to both the case and the provision it cites.
+CASE_FTS_DDL = ("CREATE VIRTUAL TABLE IF NOT EXISTS case_fts USING fts5("
+                "title, citation, holding, tokenize = 'porter unicode61')")
+
+
+def sync_case_fts(conn) -> int:
+    """Rebuild case_fts from case_treatment (full rebuild — idempotent, cheap at this scale).
+    Returns the number of indexed rows. Runs after every case ingest; migration 010 backfills
+    existing DBs with the same code so the two paths cannot drift."""
+    conn.execute(CASE_FTS_DDL)
+    conn.execute("DELETE FROM case_fts")
+    conn.execute(
+        "INSERT INTO case_fts (rowid, title, citation, holding) "
+        "SELECT ct.id, i.title, i.official_citation, ct.holding "
+        "FROM case_treatment ct JOIN instruments i ON i.id = ct.case_instrument")
+    return conn.execute("SELECT COUNT(*) FROM case_fts").fetchone()[0]
+
+
 def _upsert_case(conn, c) -> int:
     ext = f"cl-{c['cluster_id']}"
     row = conn.execute("SELECT id FROM instruments WHERE jurisdiction='US' AND ext_id_scheme='COURTLISTENER' "
@@ -121,6 +143,8 @@ def ingest(db_path, per=5, allow_corpus=False) -> dict:
             stats["links_new"] += 1
         conn.commit()
         time.sleep(0.6)                                    # be gentle to CourtListener
+    stats["fts_rows"] = sync_case_fts(conn)
+    conn.commit()
     conn.close()
     return stats
 

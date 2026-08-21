@@ -29,7 +29,9 @@ ATTRIBUTES = [
 ]
 
 
-def draft_cell(jurisdiction: str, attribute: str, source_text: str) -> dict:
-    raise NotImplementedError(
-        "Phase 4: claude-opus-4-8 drafts the answer from source_text ONLY, cites the section; "
-        "stored with verified_by=NULL until a human signs off")
+# draft_cell is wired to claude-opus-4-8 in draft.py (offline-safe: raises without a key). The
+# interactive seed in seed_cells.py was drafted under the same discipline; load_cells.py stores it,
+# verify.py gates it. Imported lazily so the web app never imports anthropic.
+def draft_cell(jurisdiction: str, attribute: str, source_text: str, citation: str = "") -> dict:
+    from .draft import draft_cell as _draft
+    return _draft(jurisdiction, attribute, source_text, citation)
